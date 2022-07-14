@@ -29,6 +29,9 @@ enum class emueiotype
 	eEXIT_IO
 };
 
+/**
+	Enum class type of mueventaddlog function.
+*/
 enum class emuelogtype
 {
 	eINFO = 1,
@@ -39,6 +42,9 @@ enum class emuelogtype
 	eALL = eINFO | eWARNING | eERROR | eDEBUG,
 };
 
+/**
+	Enum class type of Event callback.
+*/
 enum class emuestatus
 {
 	eCONNECTED,
@@ -61,8 +67,19 @@ typedef void (*mue_eventcallback)(MUE* mue, emuestatus eventype, LPVOID argument
 typedef bool (*mue_acceptcallback)(MUE* mue, LPVOID argument, LPVOID _this_ptr);
 typedef void (*mue_loghandler)(emuelogtype logtype, LPCSTR message);
 
+/**
+	muevent Read callback typedef.
+*/
 typedef bool (*mueventreadcb)(muevent* mue, LPVOID argument);
+
+/**
+	muevent Event callback typedef.
+*/
 typedef void (*mueventeventcb)(muevent* mue, emuestatus eventype, LPVOID argument);
+
+/**
+	muevent Accept callback typedef.
+*/
 typedef bool (*mueventacceptcb)(muevent* mue, LPVOID argument);
 
 

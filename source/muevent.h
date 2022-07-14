@@ -141,13 +141,14 @@ void mueventunlock(mueventbase* base);
 	Return muevent object's IP address.
 	@param mue					muevent object.
 	@param base					muevent base from mueventnewbase call.
+	@return						IP address on success and empty buffer on failure.
 */
 char* mueventgetipaddr(muevent* mue);
 
 /**
 	Return muevent object's socket.
 	@param mue					muevent object.
-	@return						socket
+	@return						socket on success and -1 on failure.
 */
 SOCKET mueventgetsocket(muevent* mue);
 
