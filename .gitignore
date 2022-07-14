@@ -1,0 +1,8 @@
+
+*.log
+*.recipe
+*.txt
+*.db
+vc-project/libmueiocp/.vs/libmueiocp/v16/.suo
+*.ipch
+*.log
