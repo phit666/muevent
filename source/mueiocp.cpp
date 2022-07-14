@@ -20,6 +20,7 @@ mueiocp::mueiocp()
 	this->m_acceptarg = NULL;
 	this->m_event = NULL;
 	this->m_listenport = 0;
+	this->m_eventid = 0;
 
 	this->m_initcltextbuffsize = MUE_CLT_MAX_IO_BUFFER_SIZE;
 	this->m_initsvrextbuffsize = MUE_SVR_MAX_IO_BUFFER_SIZE * 2;
@@ -119,7 +120,7 @@ void mueiocp::remove(int event_id)
 	delete _ctx;
 
 	this->m_mueventmaps.erase(Iter);
-	this->addlog(emuelogtype::eDEBUG, "%s(), delete event id 0x%x.", __func__, event_id);
+	this->addlog(emuelogtype::eDEBUG, "%s(), delete event id %d.", __func__, event_id);
 
 	this->unlock();
 }
@@ -136,19 +137,30 @@ bool mueiocp::iseventidvalid(int event_id)
 
 int mueiocp::geteventid()
 {
-	int event_id = 0;
+	bool bcountreset = false;
+	int event_id = -1;
+	this->lock();
 	while (true) {
 
-		if (event_id >= MUE_MAX_EVENT_ID) {
-			return -1;
+		if (this->m_eventid >= MUE_MAX_EVENT_ID && bcountreset == false) {
+			bcountreset = true;
+			this->m_eventid = 0;
+		}
+		else if (this->m_eventid >= MUE_MAX_EVENT_ID && bcountreset == true) {
+			break;
 		}
 
 		std::map<int, LPMUE_PS_CTX>::iterator Iter;
-		Iter = this->m_mueventmaps.find(event_id);
-		if (Iter == this->m_mueventmaps.end())
-			return event_id;
-		event_id++;
+		Iter = this->m_mueventmaps.find(this->m_eventid);
+		if (Iter == this->m_mueventmaps.end()) {
+			event_id = this->m_eventid;
+			this->m_eventid++;
+			break;
+		}
+		this->m_eventid++;
 	}
+	this->unlock();
+	return event_id;
 }
 
 LPMUE_PS_CTX mueiocp::getctx(int event_id)
@@ -171,13 +183,14 @@ void mueiocp::postqueued()
 	postctx->IOContext[0].wsabuf.buf = this->m_acceptctx->IOContext[0].Buffer;
 	postctx->IOContext[0].wsabuf.len = MUE_CLT_MAX_IO_BUFFER_SIZE;
 	postctx->IOContext[0].IOOperation = emueiotype::eEXIT_IO;
+	postctx->m_eventid = event_id;
 	if (PostQueuedCompletionStatus(this->m_completionport, dwBytes, (ULONG_PTR)event_id, (LPOVERLAPPED) & (postctx->IOContext[0].Overlapped)) == 0)
 	{
-		this->addlog(emuelogtype::eERROR, "%s(), PostQueuedCompletionStatus Error: %d", __func__, GetLastError());
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d PostQueuedCompletionStatus Error: %d", __func__, GetLastError(), event_id);
 		this->unlock();
 		return;
 	}
-	this->addlog(emuelogtype::eDEBUG, "%s(), PostQueuedCompletionStatus succeeded.", __func__);
+	this->addlog(emuelogtype::eDEBUG, "%s(), event id %d PostQueuedCompletionStatus succeeded.", __func__, event_id);
 	this->unlock();
 }
 
@@ -290,6 +303,7 @@ void mueiocp::listen(int listenport, mueventacceptcb acceptcb, LPVOID arg)
 	this->m_acceptctx->IOContext[0].wsabuf.len = MUE_CLT_MAX_IO_BUFFER_SIZE;
 	this->m_acceptctx->IOContext[0].IOOperation = emueiotype::eACCEPT_IO;
 	this->m_acceptctx->m_socket = this->m_listensocket;
+	this->m_acceptctx->m_eventid = this->m_accepteventid;
 
 	if (!this->do_acceptex()) {
 		delete this->m_acceptctx;
@@ -942,7 +956,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 		ctx->m_connected = true;
 		if (ctx->eventcb != NULL) {
 			ctx->eventcb(event_id, emuestatus::eCONNECTED, ctx->arg);
-			if (!this->getctx(event_id)) {
+			if (!this->iseventidvalid(event_id)) {
 				this->unlock();
 				return false;
 			}
@@ -1078,23 +1092,23 @@ bool mueiocp::handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 
 
 	LPMUE_PIO_CTX	lpIOContext = (LPMUE_PIO_CTX)&ctx->IOContext[0];
+	int eventid = ctx->m_eventid;
 
 	lpIOContext->nSentBytes += dwIoSize;
-	if (ctx->recvcb != NULL && !ctx->recvcb(ctx->m_eventid, ctx->arg)) { // receive callback
+	if (ctx->recvcb != NULL && !ctx->recvcb(eventid, ctx->arg)) { // receive callback
 		this->addlog(emuelogtype::eERROR, "%s(), Socket Header error %d", __func__, WSAGetLastError());
-		this->close(ctx->m_eventid);
+		this->close(eventid);
+		this->unlock();
+		return false;
+	}
+
+	if (!this->iseventidvalid(eventid)) {
+		this->addlog(emuelogtype::eWARNING, "%s(), event id %d is invalid.", __func__, eventid);
 		this->unlock();
 		return false;
 	}
 
 	lpIOContext->nWaitIO = 0;
-
-	if (!this->getctx(ctx->m_eventid)) {
-		this->addlog(emuelogtype::eWARNING, "%s(), mue is INVALID.", __func__);
-		this->unlock();
-		return false;
-	}
-
 	Flags = 0;
 	ZeroMemory(&(lpIOContext->Overlapped), sizeof(OVERLAPPED));
 
@@ -1108,7 +1122,7 @@ bool mueiocp::handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 	if (nRet == SOCKET_ERROR && (WSAGetLastError() != ERROR_IO_PENDING))
 	{
 		this->addlog(emuelogtype::eERROR, "%s(), WSARecv error Index 0x%x Error:%d.", __func__, ctx->m_index, WSAGetLastError());
-		this->close(ctx->m_eventid, emuestatus::eSOCKERROR);
+		this->close(eventid, emuestatus::eSOCKERROR);
 		this->unlock();
 		return false;
 	}
@@ -1152,22 +1166,19 @@ void mueiocp::close(int event_id, emuestatus flag)
 {
 	this->lock();
 
-	LPMUE_PS_CTX ctx = this->getctx(event_id);
-
-	if (ctx == NULL) {
-		this->addlog(emuelogtype::eERROR, "%s(), ctx is NULL.", __func__);
+	if (!this->iseventidvalid(event_id)) {
+		this->addlog(emuelogtype::eDEBUG, "%s(), event id %d is invalid.", __func__, event_id);
 		this->unlock();
 		return;
 	}
 
-	if (ctx->m_socket != INVALID_SOCKET) {
-		closesocket(ctx->m_socket);
-		ctx->m_socket = INVALID_SOCKET;
-	}
+	LPMUE_PS_CTX ctx = this->getctx(event_id);
+	closesocket(ctx->m_socket);
 
 	if (flag != emuestatus::eNOEVENCB && ctx->eventcb != NULL)
 		ctx->eventcb(event_id, flag, ctx->arg);
-	
+
+	this->remove(event_id);
 	this->unlock();
 }
 
@@ -1253,14 +1264,8 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 
 			if (lpPerSocketContext == NULL)
 			{
-				this->addlog(emuelogtype::eWARNING, "%s(), lpPerSocketContext is NULL.", __func__);
+				this->addlog(emuelogtype::eWARNING, "%s(), event id %d is invalid.", __func__, event_id);
 				this->unlock();
-				continue;
-			}
-
-			if (lpPerSocketContext->m_socket == INVALID_SOCKET) {
-				this->addlog(emuelogtype::eDEBUG, "%s(), event id %d socket is invalid.", __func__, event_id);
-				this->remove(event_id);
 				continue;
 			}
 

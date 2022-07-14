@@ -2,9 +2,9 @@
 #include "mue.h"
 #include "mueconfig.h"
 /**
-	@version mueiocp 2.00.00
+	@version mueiocp 3.00.00
 */
-#define _MUEIOCP_MAJOR_VER_ 0x02
+#define _MUEIOCP_MAJOR_VER_ 0x03
 #define _MUEIOCP_MINOR_VER_ 0x00
 #define _MUEIOCP_PATCH_VER_ 0x01
 
@@ -34,6 +34,8 @@ public:
 	bool iseventidvalid(int event_id);
 	void addlog(emuelogtype type, const char* msg, ...);
 
+	LPMUE_PS_CTX getctx(int event_id);
+
 private:
 
 	std::thread *m_t[MUE_MAX_IOCP_WORKERS];
@@ -58,7 +60,6 @@ private:
 	void remove(int event_id);
 
 	int geteventid();
-	LPMUE_PS_CTX getctx(int event_id);
 
 
 	mueventacceptcb m_acceptcb;
@@ -86,6 +87,7 @@ private:
 	HANDLE m_event;
 
 	WORD m_listenport;
+	int m_eventid;
 };
 
 
