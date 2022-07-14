@@ -1,6 +1,8 @@
 # MUEVENT
 MuEngine IOCP C++ library with Accept/Read/Event callback interface.
 
+Reference link: http://www.muengine.org/libmuevent/globals_func.html
+
 	muevent is a wrapper to mueiocp class in procedural style, designed to simplify 
 	the implementation of AcceptEx, ConnectEx and GetQueuedCompletionStatusEx windows API.
 
@@ -57,6 +59,3 @@ MuEngine IOCP C++ library with Accept/Read/Event callback interface.
 	}
 
 
-Class Reference Link
-
-http://www.muengine.org/libmueiocp/classmueiocp.html
