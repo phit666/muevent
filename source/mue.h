@@ -11,6 +11,7 @@
 
 #include <winsock2.h>
 #include <Ws2tcpip.h>
+#include <map>
 #include <vector>
 #include <mswsock.h>
 #include <thread>
@@ -19,6 +20,7 @@
 #define MUE_SVR_MAX_IO_BUFFER_SIZE		8192
 #define MUE_MAX_CONT_REALLOC_REQ		100			
 #define MUE_MAX_IOCP_WORKERS		32			
+#define MUE_MAX_EVENT_ID			10000
 
 enum class emueiotype
 {
@@ -70,17 +72,17 @@ typedef void (*mue_loghandler)(emuelogtype logtype, LPCSTR message);
 /**
 	muevent Read callback typedef.
 */
-typedef bool (*mueventreadcb)(muevent* mue, LPVOID argument);
+typedef bool (*mueventreadcb)(int event_id, LPVOID argument);
 
 /**
 	muevent Event callback typedef.
 */
-typedef void (*mueventeventcb)(muevent* mue, emuestatus eventype, LPVOID argument);
+typedef void (*mueventeventcb)(int event_id, emuestatus eventype, LPVOID argument);
 
 /**
 	muevent Accept callback typedef.
 */
-typedef bool (*mueventacceptcb)(muevent* mue, LPVOID argument);
+typedef bool (*mueventacceptcb)(int event_id, LPVOID argument);
 
 
 typedef struct _MUE_PIO_CTX
@@ -136,6 +138,7 @@ typedef struct _MUE_PS_CTX
 
 	intptr_t m_index;
 	SOCKET m_socket;
+	int m_eventid;
 	_MUE_PIO_CTX IOContext[2];
 	CHAR AddrBuf[((sizeof(sockaddr_in) + 16) * 2)];
 	char m_type;

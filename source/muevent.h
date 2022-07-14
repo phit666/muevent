@@ -45,9 +45,9 @@ void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb);
 	@param port					Server port to connect to.
 	@param initbuf				Optional initial data to send to server, this can't be NULL and user is responsible in allocating memory for this variable.
 	@param initlen				Size of optional data to send to server, set to 0 if initbuf has no data.
-	@return						0 on failure and muevent object on success.
+	@return						-1 on failure and muevent event id on success.
 */
-muevent* mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char *initbuf, int initlen);
+int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char *initbuf, int initlen);
 
 
 /**
@@ -62,35 +62,38 @@ void mueventdispatch(mueventbase* base, bool block);
 /**
 	Set the read and event callback of muevent object.
 
-	@param mue					muevent object from mueventacceptcb callback or mueventconnect call.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
 	@param readcb				Read callback function of type mueventreadcb for
 								processing received data.
 	@param eventcb				Event callback of type mueventeventcb for processing
 								connection status.
 	@param arg					Variable you want to pass to read and event callback.
 */
-void mueventsetcb(muevent* mue, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg = NULL);
+void mueventsetcb(mueventbase* base, int event_id, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg = NULL);
 
 /**
 	Attempt and immediate sending of data, if not possible unsent data will be moved to dynamic buffer
 	for later sending.
 
-	@param mue					muevent object.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
 	@param lpMsg				Data to send.
 	@param dwSize				Size of data to be sent
 	@return						false when failed otherwise true if the attempt is successfull
 */
-bool mueventwrite(muevent* mue, LPBYTE lpMsg, DWORD dwSize);
+bool mueventwrite(mueventbase* base, int event_id, LPBYTE lpMsg, DWORD dwSize);
 
 /**
 	Read received data, call this inside the read callback.
 
-	@param mue					muevent object.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
 	@param buffer				Store the data to be read
 	@param dwSize				Size of data to be read
 	@return						Size of data read otherwise 0 when there is error.
 */
-size_t mueventread(muevent* mue, char* buffer, size_t buffersize);
+size_t mueventread(mueventbase* base, int event_id, char* buffer, size_t buffersize);
 
 /**
 	Return mueventdispatch blocking call.
@@ -104,7 +107,7 @@ void mueventdispatchbreak(mueventbase* base);
 	@param type					Log category from enum class emuelogtype
 	@param msg					Log message.
 */
-void mueventaddlog(muevent* mue, emuelogtype type, const char* msg, ...);
+void mueventaddlog(mueventbase* base, emuelogtype type, const char* msg, ...);
 
 
 /**
@@ -113,17 +116,13 @@ void mueventaddlog(muevent* mue, emuelogtype type, const char* msg, ...);
 */
 void mueventbasedelete(mueventbase* base);
 
-/**
-	Clean the memory used by this muevent object, it will close first the connection if still active then do the cleanup.
-	@param mue					muevent object.
-*/
-void mueventdelete(muevent* mue);
 
 /**
 	Close muevent object connection.
-	@param mue					muevent object.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
 */
-void mueventclose(muevent* mue);
+void mueventclose(mueventbase* base, int event_id);
 
 /**
 	Thread safe to muevent, all calls after this is exclussive as the rest of the thread accessing this muevent will be in wait state.
@@ -139,23 +138,16 @@ void mueventunlock(mueventbase* base);
 
 /**
 	Return muevent object's IP address.
-	@param mue					muevent object.
 	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
 	@return						IP address on success and empty buffer on failure.
 */
-char* mueventgetipaddr(muevent* mue);
+char* mueventgetipaddr(mueventbase* base, int event_id);
 
 /**
 	Return muevent object's socket.
-	@param mue					muevent object.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
 	@return						socket on success and -1 on failure.
 */
-SOCKET mueventgetsocket(muevent* mue);
-
-/**
-	Return muevent object's mueventbase.
-	@param mue					muevent object.
-	@return						mueventbase on success and 0 on failure.
-*/
-mueventbase* mueventgetbase(muevent* mue);
-
+SOCKET mueventgetsocket(mueventbase* base, int event_id);

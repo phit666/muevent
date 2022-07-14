@@ -6,9 +6,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-static bool acceptcb(muevent* mue, LPVOID arg);
-static bool readcb(muevent* mue, LPVOID arg);
-static void eventcb(muevent* mue, emuestatus type, LPVOID arg);
+static bool acceptcb(int eventid, LPVOID arg);
+static bool readcb(int eventid, LPVOID arg);
+static void eventcb(int eventid, emuestatus type, LPVOID arg);
 static void logger(emuelogtype type, const char* msg);
 
 BOOL WINAPI signalhandler(DWORD signum);
@@ -20,7 +20,7 @@ int main()
 {
     SetConsoleCtrlHandler(signalhandler, TRUE);
 
-    base = mueventnewbase(2, logger);
+    base = mueventnewbase(2, logger, (DWORD)emuelogtype::eALL);
     mueventlisten(base, 3000, acceptcb);
 
     std::cout << "press Ctrl-C to exit.\n";
@@ -35,43 +35,46 @@ int main()
 }
 
 /**accept callback, returing false in this callback will close the client*/
-static bool acceptcb(muevent* mue, LPVOID arg)
+static bool acceptcb(int eventid, LPVOID arg)
 {
     /**client connection accepted, we should store the MUE object here to our variable..*/
 
     /**set read and event callback to newly accepted client*/
-    mueventsetcb(mue, readcb, eventcb);
+    mueventsetcb(base, eventid, readcb, eventcb);
     
     return true;
 }
 
 /**read callback, returing false in this callback will close the client*/
-static bool readcb(muevent* mue, LPVOID arg)
+static bool readcb(int eventid, LPVOID arg)
 {
     char buff[100] = { 0 };
 
-    int readsize = mueventread(mue, buff, sizeof(buff));
+    int readsize = mueventread(base, eventid, buff, sizeof(buff));
     
     std::cout << "Client message : " << buff << "\n";
 
-    mueventwrite(mue, (LPBYTE)buff, readsize); /**echo the received data from client*/
+    mueventwrite(base, eventid, (LPBYTE)buff, readsize); /**echo the received data from client*/
+
 
     return true;
 }
 
 /**event callback*/
-static void eventcb(muevent* mue, emuestatus type, LPVOID arg)
+static void eventcb(int eventid, emuestatus type, LPVOID arg)
 {
     switch (type) {
     case emuestatus::eCONNECTED:
-        mueventaddlog(mue, emuelogtype::eINFO, "client connected, ip:%s socket:%d", mueventgetipaddr(mue), mueventgetsocket(mue));
+        mueventaddlog(base, emuelogtype::eINFO, "client connected, ip:%s socket:%d", 
+            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
         break;
     case emuestatus::eCLOSED:
-        mueventaddlog(mue, emuelogtype::eINFO, "client connected, ip:%s", mueventgetipaddr(mue));
+        mueventaddlog(base, emuelogtype::eINFO, "client closed, ip:%s socket:%d",
+            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
         break;
     case emuestatus::eSOCKERROR:
-        mueventaddlog(mue, emuelogtype::eINFO, "client connected, ip:%s", mueventgetipaddr(mue));
-        mueventdelete(mue);
+        mueventaddlog(base, emuelogtype::eINFO, "client closed (socket error), ip:%s socket:%d",
+            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
         break;
     }
 }

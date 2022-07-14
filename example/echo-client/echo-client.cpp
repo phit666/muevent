@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-static bool acceptcb(muevent* mue, LPVOID arg);
-static bool readcb(muevent* mue, LPVOID arg);
-static void eventcb(muevent* mue, emuestatus type, LPVOID arg);
+static bool acceptcb(int eventid, LPVOID arg);
+static bool readcb(int eventid, LPVOID arg);
+static void eventcb(int eventid, emuestatus type, LPVOID arg);
 static void logger(emuelogtype type, const char* msg);
 
 mueventbase* base = NULL;
@@ -17,15 +17,16 @@ int main()
     char initbuf[1] = { 0 };
     int initlen = 0;
 
-    base = mueventnewbase(2, logger);
+    base = mueventnewbase(2, logger, (DWORD)emuelogtype::eALL);
 
     mueventdispatch(base, false); /**set false to make this call return immediately*/
 
-    mueventlock(base);
-    muevent* mue = mueventconnect(base, "127.0.0.1", 3000, initbuf, initlen);
-    int i_am_connect_index = 1;
-    mueventsetcb(mue, readcb, eventcb, (LPVOID)i_am_connect_index);
-    mueventunlock(base);
+    for (int n = 0; n < 10; n++) {
+        mueventlock(base);
+        int eventid = mueventconnect(base, "127.0.0.1", 3000, initbuf, initlen);
+        mueventsetcb(base, eventid, readcb, eventcb, (LPVOID)n);
+        mueventunlock(base);
+    }
 
     std::cout << "press any key to cleanup and exit.\n";
     int ret = _getch();
@@ -36,19 +37,20 @@ int main()
 }
 
 /**read callback*/
-static bool readcb(muevent* mue, LPVOID arg)
+static bool readcb(int eventid, LPVOID arg)
 {
     char buff[100] = { 0 };
     int index = (int)arg;
 
-    int readsize = mueventread(mue, buff, sizeof(buff)); /**receive data, read it now...*/
+    int readsize = mueventread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
     std::cout << "Server echo to index " << index << ": " << buff << "\n";
+    mueventclose(base, eventid);
 
     return true;
 }
 
 /**event callback*/
-static void eventcb(muevent* mue, emuestatus type, LPVOID arg)
+static void eventcb(int eventid, emuestatus type, LPVOID arg)
 {
     char sbuf[100] = { 0 };
     int index = (int)arg;
@@ -56,12 +58,11 @@ static void eventcb(muevent* mue, emuestatus type, LPVOID arg)
     switch (type) {
     case emuestatus::eCONNECTED: /**client is connected to host, send the message now...*/
         sprintf_s(sbuf, 100, "Hello from Index %d.", index);
-        mueventwrite(mue, (LPBYTE)sbuf, strlen(sbuf) + 1);
+        mueventwrite(base, eventid, (LPBYTE)sbuf, strlen(sbuf) + 1);
         break;
     case emuestatus::eCLOSED:
         break;
     case emuestatus::eSOCKERROR: /**free part of MUE object's memory resources, we will totally remove it with remove call or upon exit*/
-        mueventdelete(mue);
         break;
     }
 }

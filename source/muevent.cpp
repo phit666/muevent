@@ -18,12 +18,12 @@ void mueventdispatch(mueventbase* base, bool block) {
 	iocp->dispatch(block);
 }
 
-muevent* mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* initbuf, int initlen) {
+int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* initbuf, int initlen) {
 	mueiocp* iocp = (mueiocp*)base;
-	MUE* mue = iocp->makeconnect(ipaddr, port, 0);
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)mue->_ctx;
+	int eventid = iocp->makeconnect(ipaddr, port, 0);
+	LPMUE_PS_CTX ctx = iocp->getctx(eventid);
 	if (ctx == NULL) {
-		iocp->addlog(emuelogtype::eWARNING, "%s(), ctx is NULL.", __func__);
+		iocp->addlog(emuelogtype::eWARNING, "%s(), makeconnect failed.", __func__);
 		return NULL;
 	}
 	if (initbuf == NULL) {
@@ -31,37 +31,31 @@ muevent* mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* 
 		return NULL;
 	}
 	ctx->_this = (LPVOID)iocp;
-	iocp->connect(mue, initbuf, initlen);
-	return (muevent*)mue;
+	iocp->connect(eventid, initbuf, initlen);
+	return eventid;
 }
 
-void mueventsetcb(muevent* mue, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	mueiocp* iocp = (mueiocp*)ctx->_this;
-	iocp->setconnectcb(_mue, readcb, eventcb, arg);
+void mueventsetcb(mueventbase* base, int event_id, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg) {
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->setconnectcb(event_id, readcb, eventcb, arg);
 }
 
-bool mueventwrite(muevent* mue, LPBYTE lpMsg, DWORD dwSize) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL)
-		return false;
-	mueiocp* iocp = (mueiocp*)ctx->_this;
+bool mueventwrite(mueventbase* base, int event_id, LPBYTE lpMsg, DWORD dwSize) {
+	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	bool bret = iocp->sendbuffer(_mue, lpMsg, dwSize);
+	if (!iocp->iseventidvalid(event_id))
+		return false;
+	bool bret = iocp->sendbuffer(event_id, lpMsg, dwSize);
 	iocp->unlock();
 	return bret;
 }
 
-size_t mueventread(muevent* mue, char* buffer, size_t buffersize) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL)
-		return 0;
-	mueiocp* iocp = (mueiocp*)ctx->_this;
+size_t mueventread(mueventbase* base, int event_id, char* buffer, size_t buffersize) {
+	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	size_t size = iocp->readbuffer(_mue, buffer, buffersize);
+	if (!iocp->iseventidvalid(event_id))
+		return 0;
+	size_t size = iocp->readbuffer(event_id, buffer, buffersize);
 	iocp->unlock();
 	return size;
 }
@@ -86,70 +80,35 @@ void mueventbasedelete(mueventbase* base) {
 	delete iocp;
 }
 
-void mueventclose(muevent* mue) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL)
-		return;
-	mueiocp* iocp = (mueiocp*)ctx->_this;
+void mueventclose(mueventbase* base, int event_id) {
+	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	iocp->close(_mue);
+	iocp->close(event_id);
 	iocp->unlock();
 }
 
-void mueventdelete(muevent* mue) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL)
-		return;
-	mueiocp* iocp = (mueiocp*)ctx->_this;
-	iocp->lock();
-	iocp->close(_mue, emuestatus::eNOEVENCB);
-	iocp->free(_mue);
-	iocp->unlock();
-}
-
-char* mueventgetipaddr(muevent* mue) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL) {
+char* mueventgetipaddr(mueventbase* base, int event_id) {
+	mueiocp* iocp = (mueiocp*)base;
+	if (!iocp->iseventidvalid(event_id)) {
 		return &g_dummybuf[0];
 	}
-	mueiocp* iocp = (mueiocp*)ctx->_this;
-	return iocp->getipaddr(_mue);
+	return iocp->getipaddr(event_id);
 }
 
-SOCKET mueventgetsocket(muevent* mue) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL)
+SOCKET mueventgetsocket(mueventbase* base, int event_id) {
+	mueiocp* iocp = (mueiocp*)base;
+	if (!iocp->iseventidvalid(event_id)) {
 		return INVALID_SOCKET;
-	mueiocp* iocp = (mueiocp*)ctx->_this;
-	return iocp->getsocket(_mue);
+	}	return iocp->getsocket(event_id);
 }
 
-mueventbase* mueventgetbase(muevent* mue) {
-	MUE* _mue = (MUE*)mue;
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL)
-		return 0;
-	return (mueiocp*)ctx->_this;
-}
-
-void mueventaddlog(muevent* mue, emuelogtype type, const char* msg, ...) {
-	MUE* _mue = (MUE*)mue;
+void mueventaddlog(mueventbase* base, emuelogtype type, const char* msg, ...) {
 	char szBuffer[1024] = { 0 };
 	va_list pArguments;
-
-	LPMUE_PS_CTX ctx = (LPMUE_PS_CTX)_mue->_ctx;
-	if (ctx == NULL) {
-		return;
-	}
-
+	mueiocp* iocp = (mueiocp*)base;
 	va_start(pArguments, msg);
 	vsprintf_s(szBuffer, 1024, msg, pArguments);
 	va_end(pArguments);
-	mueiocp* iocp = (mueiocp*)ctx->_this;
 	iocp->addlog(type, szBuffer);
 }
 
