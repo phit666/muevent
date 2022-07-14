@@ -6,3 +6,5 @@
 vc-project/libmueiocp/.vs/libmueiocp/v16/.suo
 *.ipch
 *.log
+*.filters
+*.user
