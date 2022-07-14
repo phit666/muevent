@@ -25,17 +25,17 @@
 								type of log to be shown.
 		@return					muevent base.
 */
-mueventbase * mueventnewbase(int cpucorenum=0, mue_loghandler loghandler=0, DWORD logverboseflags=0);
+mueventbase * mueventnewbase(int cpucorenum=0, mue_loghandler loghandler=0, DWORD logverboseflags=-1);
 
 /**
 	Start accepting connections.
 	@param base					muevent base from mueventnewbase call.
+	@param port					Listen port of this server.
 	@param acceptcb				Pointer to Accept callback function of type mueventacceptcb for
 								processing client newly connected.
-	@param port					Listen port of this server.
 	@param arg					Variable  you want to pass to Accept callback.
 */
-void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb);
+void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOID arg=0);
 
 /**
 	Connect this server to another server.

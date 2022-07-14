@@ -20,8 +20,8 @@ int main()
 {
     SetConsoleCtrlHandler(signalhandler, TRUE);
 
-    base = mueventnewbase(2, logger, (DWORD)emuelogtype::eALL);
-    mueventlisten(base, 3000, acceptcb);
+    base = mueventnewbase(2, logger);
+    mueventlisten(base, 3000, acceptcb, base);
 
     std::cout << "press Ctrl-C to exit.\n";
     mueventdispatch(base, true); /**set true to make this call blocking*/
@@ -40,7 +40,7 @@ static bool acceptcb(int eventid, LPVOID arg)
     /**client connection accepted, we should store the MUE object here to our variable..*/
 
     /**set read and event callback to newly accepted client*/
-    mueventsetcb(base, eventid, readcb, eventcb);
+    mueventsetcb(arg, eventid, readcb, eventcb, arg);
     
     return true;
 }
@@ -50,11 +50,11 @@ static bool readcb(int eventid, LPVOID arg)
 {
     char buff[100] = { 0 };
 
-    int readsize = mueventread(base, eventid, buff, sizeof(buff));
+    int readsize = mueventread(arg, eventid, buff, sizeof(buff));
     
     std::cout << "Client message : " << buff << "\n";
 
-    mueventwrite(base, eventid, (LPBYTE)buff, readsize); /**echo the received data from client*/
+    mueventwrite(arg, eventid, (LPBYTE)buff, readsize); /**echo the received data from client*/
 
 
     return true;
@@ -65,16 +65,16 @@ static void eventcb(int eventid, emuestatus type, LPVOID arg)
 {
     switch (type) {
     case emuestatus::eCONNECTED:
-        mueventaddlog(base, emuelogtype::eINFO, "client connected, ip:%s socket:%d", 
-            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
+        mueventaddlog(arg, emuelogtype::eINFO, "client connected, ip:%s socket:%d",
+            mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
         break;
     case emuestatus::eCLOSED:
-        mueventaddlog(base, emuelogtype::eINFO, "client closed, ip:%s socket:%d",
-            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
+        mueventaddlog(arg, emuelogtype::eINFO, "client closed, ip:%s socket:%d",
+            mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
         break;
     case emuestatus::eSOCKERROR:
-        mueventaddlog(base, emuelogtype::eINFO, "client closed (socket error), ip:%s socket:%d",
-            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
+        mueventaddlog(arg, emuelogtype::eINFO, "client closed (socket error), ip:%s socket:%d",
+            mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
         break;
     }
 }

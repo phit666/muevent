@@ -6,7 +6,7 @@
 */
 #define _MUEIOCP_MAJOR_VER_ 0x03
 #define _MUEIOCP_MINOR_VER_ 0x00
-#define _MUEIOCP_PATCH_VER_ 0x01
+#define _MUEIOCP_PATCH_VER_ 0x02
 
 
 class mueiocp

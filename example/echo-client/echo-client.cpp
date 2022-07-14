@@ -17,11 +17,11 @@ int main()
     char initbuf[1] = { 0 };
     int initlen = 0;
 
-    base = mueventnewbase(2, logger, (DWORD)emuelogtype::eALL);
+    base = mueventnewbase(2, logger);
 
     mueventdispatch(base, false); /**set false to make this call return immediately*/
 
-    for (int n = 0; n < 10; n++) {
+    for (int n = 0; n < 3; n++) {
         mueventlock(base);
         int eventid = mueventconnect(base, "127.0.0.1", 3000, initbuf, initlen);
         mueventsetcb(base, eventid, readcb, eventcb, (LPVOID)n);

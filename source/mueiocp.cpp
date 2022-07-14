@@ -24,7 +24,7 @@ mueiocp::mueiocp()
 
 	this->m_initcltextbuffsize = MUE_CLT_MAX_IO_BUFFER_SIZE;
 	this->m_initsvrextbuffsize = MUE_SVR_MAX_IO_BUFFER_SIZE * 2;
-	this->m_logverboseflags = (DWORD)emuelogtype::eALL;
+	this->m_logverboseflags = (DWORD)emuelogtype::eINFO | (DWORD)emuelogtype::eERROR;
 	this->fnc_loghandler = NULL;
 
 
@@ -137,27 +137,29 @@ bool mueiocp::iseventidvalid(int event_id)
 
 int mueiocp::geteventid()
 {
-	bool bcountreset = false;
+	std::map<int, LPMUE_PS_CTX>::iterator Iter;
 	int event_id = -1;
+	int ctr = 0;
 	this->lock();
 	while (true) {
 
-		if (this->m_eventid >= MUE_MAX_EVENT_ID && bcountreset == false) {
-			bcountreset = true;
+		if (this->m_eventid >= MUE_MAX_EVENT_ID) {
 			this->m_eventid = 0;
 		}
-		else if (this->m_eventid >= MUE_MAX_EVENT_ID && bcountreset == true) {
+
+		if (ctr >= MUE_MAX_EVENT_ID) {
 			break;
 		}
 
-		std::map<int, LPMUE_PS_CTX>::iterator Iter;
 		Iter = this->m_mueventmaps.find(this->m_eventid);
 		if (Iter == this->m_mueventmaps.end()) {
 			event_id = this->m_eventid;
 			this->m_eventid++;
 			break;
 		}
+
 		this->m_eventid++;
+		ctr++;
 	}
 	this->unlock();
 	return event_id;
@@ -1255,7 +1257,7 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 			this->lock();
 
 #if _MUE_GCQSEX_ == 1
-			mue = (MUE*)CPEntry[n].lpCompletionKey;
+			event_id = (int)CPEntry[n].lpCompletionKey;
 			lpOverlapped = CPEntry[n].lpOverlapped;
 			dwIoSize = CPEntry[n].dwNumberOfBytesTransferred;
 #endif
@@ -1282,8 +1284,8 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 
 			if (lpPerSocketContext->m_type == 0 && (bSuccess == FALSE || (bSuccess == TRUE && dwIoSize == 0)))
 			{
-				this->addlog(emuelogtype::eWARNING, "%s(),  Connection Closed, dwIoSize == 0 IoOperation:%d (Index:0x%x)", __func__, 
-					lpIOContext->IOOperation, lpPerSocketContext->m_index);
+				this->addlog(emuelogtype::eWARNING, "%s(),  Event id %d connection Closed, dwIoSize == 0 IoOperation:%d", __func__, 
+					event_id, lpIOContext->IOOperation);
 				this->close(event_id, emuestatus::eSOCKERROR);
 				this->unlock();
 				continue;

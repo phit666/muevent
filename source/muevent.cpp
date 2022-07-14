@@ -8,9 +8,9 @@ mueventbase* mueventnewbase(int cpucorenum, mue_loghandler loghandler, DWORD log
 	return (mueventbase*)muebase;
 }
 
-void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb) {
+void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOID arg) {
 	mueiocp* iocp = (mueiocp*)base;
-	iocp->listen(port, acceptcb, NULL);
+	iocp->listen(port, acceptcb, arg);
 }
 
 void mueventdispatch(mueventbase* base, bool block) {
