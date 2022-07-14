@@ -8,12 +8,6 @@
 #define _MUEIOCP_MINOR_VER_ 0x00
 #define _MUEIOCP_PATCH_VER_ 0x01
 
-/**
-	Toggle the use of GetQueuedCompletionStatusEx or GetQueuedCompletionStatus
-		1 - GetQueuedCompletionStatusEx
-		0 - GetQueuedCompletionStatus
-*/
-#define _MUE_GCQSEX_ 0
 
 class mueiocp
 {
@@ -25,22 +19,19 @@ public:
 	void dispatch(bool wait = true);
 	void dispatchbreak();
 	void listen(int listenport, mueventacceptcb acceptcb, LPVOID arg);
-	void setconnectcb(MUE* mue, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg = NULL);
-	MUE* makeconnect(const char* ipaddr, WORD port, int index, mue_datahandler datahandler = NULL);
-	bool connect(MUE* mue, char* initData, int initLen);
-	bool sendbuffer(MUE* mue, LPBYTE lpMsg, DWORD dwSize);
-	size_t readbuffer(MUE* mue, char* buffer, size_t buffersize);
-	void close(MUE* mue, emuestatus flag = emuestatus::eCLOSED);
-	void free(MUE* mue);
-	void remove(MUE* mue);
-	bool delayconnect(MUE* mue, DWORD mseconds);
-	SOCKET getsocket(MUE* mue);
-	char* getipaddr(MUE* mue);
-	void setindex(MUE* mue, intptr_t index);
-	intptr_t getindex(MUE* mue);
-	bool isvalid(MUE* mue);
+	void setconnectcb(int event_id, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg = NULL);
+	int makeconnect(const char* ipaddr, WORD port, int index, mue_datahandler datahandler = NULL);
+	bool connect(int event_id, char* initData, int initLen);
+	bool sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize);
+	size_t readbuffer(int event_id, char* buffer, size_t buffersize);
+	void close(int event_id, emuestatus flag = emuestatus::eCLOSED);
+	SOCKET getsocket(int event_id);
+	char* getipaddr(int event_id);
+	void setindex(int event_id, intptr_t index);
+	intptr_t getindex(int event_id);
 	void lock();
 	void unlock();
+	bool iseventidvalid(int event_id);
 	void addlog(emuelogtype type, const char* msg, ...);
 
 private:
@@ -52,18 +43,22 @@ private:
 	bool inithelperfunc();
 	SOCKET createsocket();
 	int createlistensocket(WORD port);
-	bool updatecompletionport(SOCKET socket, MUE *mue);
-	bool IoSendSecond(MUE* mue);
-	bool IoMoreSend(MUE* mue);
+	bool updatecompletionport(SOCKET socket, int event_id);
+	bool IoSendSecond(LPMUE_PS_CTX ctx);
+	bool IoMoreSend(LPMUE_PS_CTX ctx);
 
 	bool do_acceptex();
 	bool redo_acceptex();
-	bool handleaccept(MUE* mue);
-	bool handleconnect(MUE* mue, DWORD dwIoSize);
-	bool handlesend(MUE* mue, DWORD dwIoSize);
-	bool handlereceive(MUE* mue, DWORD dwIoSize);
+	bool handleaccept(LPMUE_PS_CTX ctx);
+	bool handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize);
+	bool handlesend(LPMUE_PS_CTX ctx, DWORD dwIoSize);
+	bool handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize);
 	void clear();
 	void postqueued();
+	void remove(int event_id);
+
+	int geteventid();
+	LPMUE_PS_CTX getctx(int event_id);
 
 
 	mueventacceptcb m_acceptcb;
@@ -76,12 +71,12 @@ private:
 	HANDLE m_completionport;
 
 	LPMUE_PS_CTX m_acceptctx;
-	MUE* m_acceptmue;
+	int m_accepteventid;
 
 	size_t m_initcltextbuffsize;
 	size_t m_initsvrextbuffsize;
 
-	std::vector<MUE*>m_vMUE;
+	std::map<int, LPMUE_PS_CTX>m_mueventmaps;
 
 	CRITICAL_SECTION m_crit;
 
