@@ -21,7 +21,7 @@ int main()
 
     mueventdispatch(base, false); /**set false to make this call return immediately*/
 
-    for (int n = 0; n < 3; n++) {
+    for (int n = 0; n < 50; n++) {
         mueventlock(base);
         int eventid = mueventconnect(base, "127.0.0.1", 3000, initbuf, initlen);
         mueventsetcb(base, eventid, readcb, eventcb, (LPVOID)n);
@@ -44,8 +44,6 @@ static bool readcb(int eventid, LPVOID arg)
 
     int readsize = mueventread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
     std::cout << "Server echo to index " << index << ": " << buff << "\n";
-    mueventclose(base, eventid);
-
     return true;
 }
 
@@ -71,7 +69,6 @@ static void eventcb(int eventid, emuestatus type, LPVOID arg)
 static void logger(emuelogtype type, const char* msg)
 {
     switch (type) {
-    case emuelogtype::eTEST:
     case emuelogtype::eINFO:
         std::cout << "[INFO] " << msg << "\n";
         break;

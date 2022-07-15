@@ -69,12 +69,8 @@ static void eventcb(int eventid, emuestatus type, LPVOID arg)
             mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
         break;
     case emuestatus::eCLOSED:
-        mueventaddlog(arg, emuelogtype::eINFO, "client closed, ip:%s socket:%d",
-            mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
         break;
     case emuestatus::eSOCKERROR:
-        mueventaddlog(arg, emuelogtype::eINFO, "client closed (socket error), ip:%s socket:%d",
-            mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
         break;
     }
 }
@@ -83,7 +79,6 @@ static void eventcb(int eventid, emuestatus type, LPVOID arg)
 static void logger(emuelogtype type, const char* msg)
 {
     switch (type) {
-    case emuelogtype::eTEST:
     case emuelogtype::eINFO:
         std::cout << "[INFO] " << msg << "\n";
         break;

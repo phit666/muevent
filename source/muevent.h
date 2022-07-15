@@ -23,9 +23,10 @@
 								OutputDebugString when set to NULL.
 		@param logverboseflags	Bit flags of enum class emuelogtype for filtering
 								type of log to be shown.
+		@param connect2ndbuffer	This is a dynamic buffer storage that will expand as required by the data allocation size needed to be sent. 
 		@return					muevent base.
 */
-mueventbase * mueventnewbase(int cpucorenum=0, mue_loghandler loghandler=0, DWORD logverboseflags=-1);
+mueventbase * mueventnewbase(int cpucorenum=0, mue_loghandler loghandler=0, DWORD logverboseflags=-1, int connect2ndbuffer=0);
 
 /**
 	Start accepting connections.
@@ -49,6 +50,33 @@ void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOI
 */
 int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char *initbuf, int initlen);
 
+/**
+	Make the connection setup only but don't connect.
+	@param base					muevent base from mueventnewbase call.
+	@param ipaddr				Server IP address to connect to.
+	@param port					Server port to connect to.
+	@return						-1 on failure and muevent event id on success.
+*/
+int mueventmakeconnect(mueventbase* base, const char* ipaddr, WORD port);
+
+/**
+	Connect to another server based on the parameters of mueventmakeconnect call.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id from mueventmakeconnect call.
+	@param initbuf				Optional initial data to send to server, this can't be NULL and user is responsible in allocating memory for this variable.
+	@param initlen				Size of optional data to send to server, set to 0 if initbuf has no data.
+	@return						true on success and false on failure.
+*/
+bool mueventconnect(mueventbase* base, int eventid, char* initbuf, int initlen);
+
+/**
+	Check if the call to mueventconnect really made, call to mueventconnect will return true immediately if there has no socket error but the IO is still
+	pending, calling mueventisconnected will get the real connection status. 
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id from mueventmakeconnect call.
+	@return						true if connected and false if not.
+*/
+bool mueventisconnected(mueventbase* base, int eventid);
 
 /**
 	Start mueevent.
@@ -121,8 +149,15 @@ void mueventbasedelete(mueventbase* base);
 	Close muevent object connection.
 	@param base					muevent base from mueventnewbase call.
 	@param event_id				muevent event id.
+	@param status				close category of enum class emuestatus.
+
+	enum class emuestatus
+	@enum	eCONNECTED			client connected.
+	@enum	eCLOSED				client is closed not by socket error.
+	@enum	eSOCKERROR			client is closed because of socket error.
+	@enum	eNOEVENCB			client is closed not by socket error and event callback will not be called.
 */
-void mueventclose(mueventbase* base, int event_id);
+void mueventclose(mueventbase* base, int event_id, emuestatus status = emuestatus::eCLOSED);
 
 /**
 	Thread safe to muevent, all calls after this is exclussive as the rest of the thread accessing this muevent will be in wait state.
@@ -151,3 +186,35 @@ char* mueventgetipaddr(mueventbase* base, int event_id);
 	@return						socket on success and -1 on failure.
 */
 SOCKET mueventgetsocket(mueventbase* base, int event_id);
+
+/**
+	Set a user index to muevent context.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@param userindex			User index to set in muevent's context.
+*/
+void mueventsetindex(mueventbase* base, int event_id, intptr_t userindex);
+
+/**
+	Get the user index from muevent context.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@return						-1 if not set or the user index when set.
+*/
+intptr_t mueventgetindex(mueventbase* base, int event_id);
+
+/**
+	Check if muevent event id is valid.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@return						true if event id is valid otherwise false.
+*/
+bool mueventisvalid(mueventbase* base, int event_id);
+
+/**
+	Get the active IO thread workers.
+	@param base					muevent base from mueventnewbase call.
+	@return						count of active IO thread workers.
+*/
+int mueventactiveioworkers(mueventbase* base);
+

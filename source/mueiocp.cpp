@@ -21,9 +21,10 @@ mueiocp::mueiocp()
 	this->m_event = NULL;
 	this->m_listenport = 0;
 	this->m_eventid = 0;
+	this->m_activeworkers = 0;
 
 	this->m_initcltextbuffsize = MUE_CLT_MAX_IO_BUFFER_SIZE;
-	this->m_initsvrextbuffsize = MUE_SVR_MAX_IO_BUFFER_SIZE * 2;
+	this->m_initsvrextbuffsize = MUE_SVR_MAX_IO_BUFFER_SIZE;
 	this->m_logverboseflags = (DWORD)emuelogtype::eINFO | (DWORD)emuelogtype::eERROR;
 	this->fnc_loghandler = NULL;
 
@@ -31,6 +32,7 @@ mueiocp::mueiocp()
 	InitializeCriticalSection(&this->m_crit);
 	for (int i = 0; i < MUE_MAX_IOCP_WORKERS; i++) {
 		this->m_t[i] = nullptr;
+		this->m_terrcounts[i] = 0;
 	}
 }
 
@@ -45,10 +47,9 @@ mueiocp::~mueiocp()
 		}
 	}
 #else
-	for (int i = 0; i < MUE_MAX_IOCP_WORKERS; i++) {
-		if (this->m_t[i] != nullptr) {
-			this->postqueued();
-		}
+	int activeworkers = this->m_activeworkers;
+	for (int i = 0; i < activeworkers; i++) {
+		this->postqueued();
 	}
 #endif
 	if (this->m_completionport != NULL)
@@ -108,8 +109,10 @@ void mueiocp::remove(int event_id)
 
 	Iter = this->m_mueventmaps.find(event_id);
 
-	if (Iter == this->m_mueventmaps.end())
+	if (Iter == this->m_mueventmaps.end()) {
+		this->unlock();
 		return;
+	}
 
 	_ctx = Iter->second;
 
@@ -128,10 +131,10 @@ void mueiocp::remove(int event_id)
 bool mueiocp::iseventidvalid(int event_id)
 {
 	bool bret = false;
-	this->lock();
+	if (event_id == -1)
+		return bret;
 	if (this->getctx(event_id) != NULL)
 		bret = true;
-	this->unlock();
 	return bret;
 }
 
@@ -168,9 +171,15 @@ int mueiocp::geteventid()
 LPMUE_PS_CTX mueiocp::getctx(int event_id)
 {
 	std::map<int, LPMUE_PS_CTX>::iterator Iter;
-	Iter = this->m_mueventmaps.find(event_id);
-	if (Iter == this->m_mueventmaps.end())
+	if (event_id == -1)
 		return NULL;
+	this->lock();
+	Iter = this->m_mueventmaps.find(event_id);
+	if (Iter == this->m_mueventmaps.end()) {
+		this->unlock();
+		return NULL;
+	}
+	this->unlock();
 	return Iter->second;
 }
 
@@ -256,8 +265,10 @@ void mueiocp::init(int cpucorenum, mue_loghandler loghandler, DWORD logverbosefl
 
 void mueiocp::dispatch(bool wait)
 {
+	this->m_tindex = 0;
 	for (int n = 0; n < this->m_workers; n++) {
-		this->m_t[n] = new std::thread([this]() {IOCPServerWorker(this->m_completionport); });
+		this->m_tindex = static_cast<intptr_t>(n);
+		this->m_t[n] = new std::thread([this]() {IOCPServerWorker((LPVOID)this->m_tindex); });
 	}
 
 	if (wait == true) {
@@ -556,7 +567,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 		if ((lpIoCtxt->nSecondOfs + dwSize) > lpIoCtxt->pBufferLen)
 		{
 			if (lpIoCtxt->pReallocCounts >= MUE_MAX_CONT_REALLOC_REQ) {
-				this->addlog(emuelogtype::eERROR, "%s(), %d pReallocCounts (1) is max out, 0x%x", __func__, lpPerSocketContext->m_index, MUE_MAX_CONT_REALLOC_REQ);
+				this->addlog(emuelogtype::eERROR, "%s(), event id %d pReallocCounts (1) is max out, 0x%x", __func__, event_id, MUE_MAX_CONT_REALLOC_REQ);
 				::free(lpIoCtxt->pBuffer);
 				lpIoCtxt->pBufferLen = MUE_CLT_MAX_IO_BUFFER_SIZE;
 				lpIoCtxt->pBuffer = (CHAR*)calloc(lpIoCtxt->pBufferLen, sizeof(CHAR));
@@ -575,7 +586,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 			CHAR* tmpBuffer = (CHAR*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
 
 			if (tmpBuffer == NULL) {
-				this->addlog(emuelogtype::eERROR, "%s(), 0x%x realloc (1) failed, requested size is %d.", __func__, lpPerSocketContext->m_index, lpIoCtxt->pBufferLen);
+				this->addlog(emuelogtype::eERROR, "%s(), event id %d realloc (1) failed, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
 				this->close(event_id);
 				this->unlock();
 				return false;
@@ -584,11 +595,11 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 			lpIoCtxt->pBuffer = tmpBuffer;
 			lpIoCtxt->pReallocCounts++;
 
-			this->addlog(emuelogtype::eDEBUG, "%s(), 0x%x realloc (1) succeeded, requested size is %d.", __func__, lpPerSocketContext->m_index, lpIoCtxt->pBufferLen);
+			this->addlog(emuelogtype::eDEBUG, "%s(), event id %d realloc (1) succeeded, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
 		}
 
-		this->addlog(emuelogtype::eDEBUG, "%s(), 0x%x copied %d bytes to pBuffer, pbuffer size now is %d.", __func__,
-			lpPerSocketContext->m_index, dwSize, lpIoCtxt->nSecondOfs + dwSize);
+		this->addlog(emuelogtype::eTEST, "%s(), event id %d copied %d bytes to pBuffer, pbuffer size now is %d.", __func__,
+			event_id, dwSize, lpIoCtxt->nSecondOfs + dwSize);
 
 		memcpy(&lpIoCtxt->pBuffer[lpIoCtxt->nSecondOfs], lpMsg, dwSize);
 		lpIoCtxt->nSecondOfs += dwSize;
@@ -623,7 +634,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 		if ((lpIoCtxt->nSecondOfs + bufflen) > lpIoCtxt->pBufferLen) {
 
 			if (lpIoCtxt->pReallocCounts >= MUE_MAX_CONT_REALLOC_REQ) {
-				this->addlog(emuelogtype::eERROR, "%s(), 0x%x pReallocCounts (2) is max out, %d", __func__, lpPerSocketContext->m_index, MUE_MAX_CONT_REALLOC_REQ);
+				this->addlog(emuelogtype::eERROR, "%s(), event id %d pReallocCounts (2) is max out, %d", __func__, event_id, MUE_MAX_CONT_REALLOC_REQ);
 				::free(lpIoCtxt->pBuffer);
 				lpIoCtxt->pBufferLen = MUE_CLT_MAX_IO_BUFFER_SIZE;
 				lpIoCtxt->pBuffer = (CHAR*)calloc(lpIoCtxt->pBufferLen, sizeof(CHAR));
@@ -642,7 +653,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 			CHAR* tmpBuffer = (CHAR*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
 
 			if (tmpBuffer == NULL) {
-				this->addlog(emuelogtype::eERROR, "%s(), 0x%x realloc (2) failed, requested size is %d.", __func__, lpPerSocketContext->m_index, lpIoCtxt->pBufferLen);
+				this->addlog(emuelogtype::eERROR, "%s(), event id %d realloc (2) failed, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
 				this->close(event_id);
 				this->unlock();
 				return false;
@@ -651,7 +662,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 			lpIoCtxt->pBuffer = tmpBuffer;
 			lpIoCtxt->pReallocCounts++;
 
-			this->addlog(emuelogtype::eDEBUG, "%s(), 0x%x realloc (2) succeeded, requested size is %d.", __func__, lpPerSocketContext->m_index, lpIoCtxt->pBufferLen);
+			this->addlog(emuelogtype::eDEBUG, "%s(), event id %d realloc (2) succeeded, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
 		}
 
 		memcpy(&lpIoCtxt->pBuffer[lpIoCtxt->nSecondOfs], &lpMsg[difflen], bufflen);
@@ -679,7 +690,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 		{
 			lpIoCtxt->nWaitIO = 0;
 
-			this->addlog(emuelogtype::eERROR, "%s(), 0x%x WSASend failed with error %d.", __func__, lpPerSocketContext->m_index, WSAGetLastError());
+			this->addlog(emuelogtype::eERROR, "%s(), event id %d WSASend failed with error %d.", __func__, event_id, WSAGetLastError());
 			this->close(event_id, emuestatus::eSOCKERROR);
 			this->unlock();
 			return false;
@@ -726,13 +737,13 @@ bool mueiocp::connect(int event_id, char* initData, int initLen)
 		return NULL;
 	}
 
-	this->addlog(emuelogtype::eDEBUG, "%s(), 0x%x Port:%d succeeded.", __func__, pSocketContext->m_index, pSocketContext->m_conport);
+	this->addlog(emuelogtype::eDEBUG, "%s(), event id %d Port:%d succeeded.", __func__, event_id, pSocketContext->m_conport);
 	pSocketContext->m_lastconnecttick = GetTickCount();
 	this->unlock();
 	return true;
 }
 
-int mueiocp::makeconnect(const char* ipaddr, WORD port, int index, mue_datahandler datahandler)
+int mueiocp::makeconnect(const char* ipaddr, WORD port, intptr_t index, mue_datahandler datahandler)
 {
 	int nRet = 0;
 	DWORD bytes = 0;
@@ -741,7 +752,7 @@ int mueiocp::makeconnect(const char* ipaddr, WORD port, int index, mue_datahandl
 	struct sockaddr_in addr;
 	struct sockaddr_in remote_address;
 
-	this->addlog(emuelogtype::eDEBUG, "%s(), Index 0x%x Port:%d...", __func__, index, port);
+	this->addlog(emuelogtype::eDEBUG, "%s(), Index %d Port:%d...", __func__, (int)index, port);
 	this->lock();
 	LPMUE_PS_CTX pSocketContext = new MUE_PS_CTX;
 	pSocketContext->clear();
@@ -805,7 +816,7 @@ int mueiocp::makeconnect(const char* ipaddr, WORD port, int index, mue_datahandl
 		return -1;
 	}
 
-	this->addlog(emuelogtype::eDEBUG, "%s(), Index 0x%x Port:%d succeeded.", __func__, index, port);
+	this->addlog(emuelogtype::eDEBUG, "%s(), Index %d Port:%d succeeded.", __func__, (int)index, port);
 	this->m_mueventmaps.insert(std::pair<int, LPMUE_PS_CTX>(event_id, pSocketContext));
 	this->unlock();
 	return event_id;
@@ -905,7 +916,7 @@ bool mueiocp::handleaccept(LPMUE_PS_CTX ctx)
 
 	if (nRet == SOCKET_ERROR && WSAGetLastError() != ERROR_IO_PENDING)
 	{
-		this->addlog(emuelogtype::eERROR, "%s(), WSARecv() failed with Index 0x%x Error:%d", __func__, lpAcceptSocketContext->m_index, WSAGetLastError());
+		this->addlog(emuelogtype::eERROR, "%s(), WSARecv() failed with event id %d Error:%d", __func__, event_id, WSAGetLastError());
 		this->close(event_id, emuestatus::eSOCKERROR);
 		this->unlock();
 		return false;
@@ -949,7 +960,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 
 		if (nRet == SOCKET_ERROR && WSAGetLastError() != ERROR_IO_PENDING)
 		{
-			this->addlog(emuelogtype::eERROR, "%s(), WSARecv() failed with Index 0x%x Error:%d", __func__, ctx->m_index, WSAGetLastError());
+			this->addlog(emuelogtype::eERROR, "%s(), WSARecv() failed with event id %d Error:%d", __func__, event_id, WSAGetLastError());
 			this->close(event_id, emuestatus::eSOCKERROR);
 			this->unlock();
 			return false;
@@ -970,7 +981,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 		this->close(event_id, emuestatus::eSOCKERROR);
 	}
 
-	this->addlog(emuelogtype::eDEBUG, "%s(), Index:0x%x Socket:%d.", __func__, ctx->m_index, (int)ctx->m_socket);
+	this->addlog(emuelogtype::eDEBUG, "%s(), event id %d Socket:%d connected.", __func__, event_id, (int)ctx->m_socket);
 	this->unlock();
 	return true;
 }
@@ -1123,7 +1134,7 @@ bool mueiocp::handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 
 	if (nRet == SOCKET_ERROR && (WSAGetLastError() != ERROR_IO_PENDING))
 	{
-		this->addlog(emuelogtype::eERROR, "%s(), WSARecv error Index 0x%x Error:%d.", __func__, ctx->m_index, WSAGetLastError());
+		this->addlog(emuelogtype::eERROR, "%s(), WSARecv error event id %d Error:%d.", __func__, eventid, WSAGetLastError());
 		this->close(eventid, emuestatus::eSOCKERROR);
 		this->unlock();
 		return false;
@@ -1168,25 +1179,29 @@ void mueiocp::close(int event_id, emuestatus flag)
 {
 	this->lock();
 
-	if (!this->iseventidvalid(event_id)) {
+	LPMUE_PS_CTX ctx = this->getctx(event_id);
+
+	if (ctx == NULL) {
 		this->addlog(emuelogtype::eDEBUG, "%s(), event id %d is invalid.", __func__, event_id);
 		this->unlock();
 		return;
 	}
 
-	LPMUE_PS_CTX ctx = this->getctx(event_id);
 	closesocket(ctx->m_socket);
-
-	if (flag != emuestatus::eNOEVENCB && ctx->eventcb != NULL)
-		ctx->eventcb(event_id, flag, ctx->arg);
-
+	mueventeventcb eventcb = ctx->eventcb;
+	LPVOID eventcb_arg = ctx->arg;
 	this->remove(event_id);
+
+	if (flag != emuestatus::eNOEVENCB && eventcb != NULL)
+		eventcb(event_id, flag, eventcb_arg);
+
 	this->unlock();
 }
 
-void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
+void mueiocp::IOCPServerWorker(LPVOID arg)
 {
-	HANDLE	CompletionPort = (HANDLE)CompletionPortID;
+	intptr_t _t_index = (intptr_t)arg;
+	int t_index = static_cast<int>(_t_index);
 	DWORD	dwIoSize;
 	DWORD	Flags = 0;
 	DWORD	dwSendNumBytes = 0;
@@ -1201,6 +1216,8 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 	ULONG					MaxEntries = 64;
 	ULONG					NumEntriesRemoved;
 #endif
+
+	this->m_activeworkers += 1;
 
 	while (true)
 	{
@@ -1228,7 +1245,7 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 		}
 #else
 		bSuccess = GetQueuedCompletionStatus(
-			CompletionPort,
+			this->m_completionport,
 			&dwIoSize,
 			(PULONG_PTR)&event_id,
 			&lpOverlapped,
@@ -1245,6 +1262,7 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 					(aError != ERROR_OPERATION_ABORTED) && (aError != ERROR_SEM_TIMEOUT) && (aError != ERROR_HOST_UNREACHABLE) && (aError != ERROR_CONNECTION_REFUSED)) // Patch
 				{
 					this->addlog(emuelogtype::eERROR, "%s(), GetQueueCompletionStatus Error: %d", __func__, GetLastError());
+					this->m_activeworkers -= 1;
 					return;
 				}
 			}
@@ -1275,7 +1293,16 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 
 			if (lpIOContext == NULL)
 			{
-				this->addlog(emuelogtype::eERROR, "%s(),  lpIOContext is NULL", __func__);
+				this->addlog(emuelogtype::eERROR, "%s(), event id %d lpOverlapped is NULL, Error:%d IO:%d", __func__, 
+					event_id, GetLastError(), lpPerSocketContext->IOContext[0].IOOperation);
+
+				if (this->m_terrcounts[t_index] >= 10) {
+					this->m_activeworkers -= 1;
+					this->unlock();
+					return;
+				}
+
+				this->m_terrcounts[t_index] += 1;
 				this->unlock();
 				continue;
 			}
@@ -1284,7 +1311,7 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 
 			if (lpPerSocketContext->m_type == 0 && (bSuccess == FALSE || (bSuccess == TRUE && dwIoSize == 0)))
 			{
-				this->addlog(emuelogtype::eWARNING, "%s(),  Event id %d connection Closed, dwIoSize == 0 IoOperation:%d", __func__, 
+				this->addlog(emuelogtype::eWARNING, "%s(),  Event id %d connection Closed, Size == 0 IO:%d", __func__, 
 					event_id, lpIOContext->IOOperation);
 				this->close(event_id, emuestatus::eSOCKERROR);
 				this->unlock();
@@ -1310,7 +1337,8 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 				break;
 #if _MUE_GCQSEX_ == 0
 			case emueiotype::eEXIT_IO:
-				this->addlog(emuelogtype::eDEBUG, "%s(), GetQueueCompletionStatus Terminated (PostQueued).", __func__);
+				this->addlog(emuelogtype::eDEBUG, "%s(), event id %d GetQueueCompletionStatus Terminated (PostQueued).", __func__, event_id);
+				this->m_activeworkers -= 1;
 				this->unlock();
 				return;
 #endif
@@ -1319,6 +1347,8 @@ void mueiocp::IOCPServerWorker(LPVOID CompletionPortID)
 			this->unlock();
 		}
 	}
+
+	this->m_activeworkers -= 1;
 }
 
 void mueiocp::addlog(emuelogtype type, const char* msg, ...)
@@ -1347,7 +1377,9 @@ void mueiocp::addlog(emuelogtype type, const char* msg, ...)
 
 SOCKET mueiocp::getsocket(int event_id) {
 	LPMUE_PS_CTX _ctx = this->getctx(event_id); 
-	return _ctx->m_socket; 
+	if (_ctx == NULL)
+		return -1;
+	return _ctx->m_socket;
 }
 
 char* mueiocp::getipaddr(int event_id) {

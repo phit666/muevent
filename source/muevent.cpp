@@ -2,9 +2,9 @@
 
 char g_dummybuf[16] = { 0 };
 
-mueventbase* mueventnewbase(int cpucorenum, mue_loghandler loghandler, DWORD logverboseflags) {
+mueventbase* mueventnewbase(int cpucorenum, mue_loghandler loghandler, DWORD logverboseflags, int connect2ndbuffer) {
 	mueiocp* muebase = new mueiocp;
-	muebase->init(cpucorenum, loghandler, logverboseflags);
+	muebase->init(cpucorenum, loghandler, logverboseflags, 0, connect2ndbuffer);
 	return (mueventbase*)muebase;
 }
 
@@ -35,6 +35,36 @@ int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* initb
 	return eventid;
 }
 
+int mueventmakeconnect(mueventbase* base, const char* ipaddr, WORD port) {
+	mueiocp* iocp = (mueiocp*)base;
+	int eventid = iocp->makeconnect(ipaddr, port, 0);
+	LPMUE_PS_CTX ctx = iocp->getctx(eventid);
+	if (ctx == NULL) {
+		iocp->addlog(emuelogtype::eWARNING, "%s(), mueventmakeconnect failed.", __func__);
+		return NULL;
+	}
+	ctx->_this = (LPVOID)iocp;
+	return eventid;
+}
+
+bool mueventconnect(mueventbase* base, int eventid, char* initbuf, int initlen) {
+	mueiocp* iocp = (mueiocp*)base;
+	return iocp->connect(eventid, initbuf, initlen);
+}
+
+bool mueventisconnected(mueventbase* base, int eventid) {
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->lock();
+	LPMUE_PS_CTX ctx = iocp->getctx(eventid);
+	if (ctx == NULL) {
+		iocp->unlock();
+		return false;
+	}
+	bool bret = ctx->m_connected;
+	iocp->unlock();
+	return bret;
+}
+
 void mueventsetcb(mueventbase* base, int event_id, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg) {
 	mueiocp* iocp = (mueiocp*)base;
 	iocp->setconnectcb(event_id, readcb, eventcb, arg);
@@ -43,8 +73,6 @@ void mueventsetcb(mueventbase* base, int event_id, mueventreadcb readcb, muevent
 bool mueventwrite(mueventbase* base, int event_id, LPBYTE lpMsg, DWORD dwSize) {
 	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	if (!iocp->iseventidvalid(event_id))
-		return false;
 	bool bret = iocp->sendbuffer(event_id, lpMsg, dwSize);
 	iocp->unlock();
 	return bret;
@@ -53,8 +81,6 @@ bool mueventwrite(mueventbase* base, int event_id, LPBYTE lpMsg, DWORD dwSize) {
 size_t mueventread(mueventbase* base, int event_id, char* buffer, size_t buffersize) {
 	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	if (!iocp->iseventidvalid(event_id))
-		return 0;
 	size_t size = iocp->readbuffer(event_id, buffer, buffersize);
 	iocp->unlock();
 	return size;
@@ -80,27 +106,54 @@ void mueventbasedelete(mueventbase* base) {
 	delete iocp;
 }
 
-void mueventclose(mueventbase* base, int event_id) {
+void mueventclose(mueventbase* base, int event_id, emuestatus status) {
 	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	iocp->close(event_id);
+	iocp->close(event_id, status);
 	iocp->unlock();
 }
 
 char* mueventgetipaddr(mueventbase* base, int event_id) {
 	mueiocp* iocp = (mueiocp*)base;
-	if (!iocp->iseventidvalid(event_id)) {
-		return &g_dummybuf[0];
-	}
 	return iocp->getipaddr(event_id);
 }
 
 SOCKET mueventgetsocket(mueventbase* base, int event_id) {
 	mueiocp* iocp = (mueiocp*)base;
-	if (!iocp->iseventidvalid(event_id)) {
-		return INVALID_SOCKET;
-	}	return iocp->getsocket(event_id);
+	iocp->lock();
+	SOCKET s = iocp->getsocket(event_id);
+	iocp->unlock();
+	return s;
 }
+
+void mueventsetindex(mueventbase* base, int event_id, intptr_t userindex){
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->lock();
+	iocp->setindex(event_id, userindex);
+	iocp->unlock();
+}
+
+intptr_t mueventgetindex(mueventbase* base, int event_id) {
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->lock();
+	intptr_t index = iocp->getindex(event_id);
+	iocp->unlock();
+	return index;
+}
+
+bool mueventisvalid(mueventbase* base, int event_id) {
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->lock();
+	bool bret = iocp->iseventidvalid(event_id);
+	iocp->unlock();
+	return bret;
+}
+
+int mueventactiveioworkers(mueventbase* base) {
+	mueiocp* iocp = (mueiocp*)base;
+	return iocp->getactiveioworkers();
+}
+
 
 void mueventaddlog(mueventbase* base, emuelogtype type, const char* msg, ...) {
 	char szBuffer[1024] = { 0 };

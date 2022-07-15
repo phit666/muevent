@@ -122,6 +122,7 @@ typedef struct _MUE_PS_CTX
 	{
 		m_socket = -1;
 		m_index = -1;
+		m_eventid = -1;
 		memset(AddrBuf, 0, ((sizeof(sockaddr_in) + 16) * 2));
 		m_type = -1;
 		m_initbuflen = 0;
