@@ -80,7 +80,7 @@ void mueiocp::clear()
 		if (_ctx != NULL) {
 			this->addlog(emuelogtype::eDEBUG, "%s(), closing event id %d.", __func__, _ctx->m_eventid);
 			if (_ctx->m_socket != INVALID_SOCKET)
-				closesocket(_ctx->m_socket);
+				::closesocket(_ctx->m_socket);
 			if (_ctx->IOContext[1].pBuffer != NULL) {
 				::free(_ctx->IOContext[1].pBuffer);
 			}
@@ -401,7 +401,7 @@ bool mueiocp::redo_acceptex()
 	this->lock();
 
 	if (this->m_listensocket != INVALID_SOCKET)
-		closesocket(this->m_listensocket);
+		::closesocket(this->m_listensocket);
 
 	this->m_listensocket = createsocket();
 
@@ -799,7 +799,7 @@ int mueiocp::makeconnect(const char* ipaddr, WORD port, intptr_t index, mue_data
 	}
 
 	if (!this->updatecompletionport(s, event_id)) {
-		closesocket(s);
+		::closesocket(s);
 		delete pSocketContext;
 		this->unlock();
 		return NULL;
@@ -834,7 +834,7 @@ int mueiocp::makeconnect(const char* ipaddr, WORD port, intptr_t index, mue_data
 	if (bind(s, (SOCKADDR*)&addr, sizeof(addr))) {
 		this->addlog(emuelogtype::eERROR, "%s(), bind() failed: %d.", __func__, WSAGetLastError());
 		::free(pSocketContext->IOContext[1].pBuffer);
-		closesocket(s);
+		::closesocket(s);
 		delete pSocketContext;
 		this->unlock();
 		return -1;
@@ -911,7 +911,7 @@ bool mueiocp::handleaccept(LPMUE_PS_CTX ctx)
 	if (event_id == -1) {
 		this->addlog(emuelogtype::eWARNING, "%s(), no available event id.", __func__);
 		::free(lpAcceptSocketContext->IOContext[1].pBuffer);
-		closesocket(lpAcceptSocketContext->m_socket);
+		::closesocket(lpAcceptSocketContext->m_socket);
 		delete lpAcceptSocketContext;
 		this->unlock();
 		return false;
@@ -919,7 +919,7 @@ bool mueiocp::handleaccept(LPMUE_PS_CTX ctx)
 
 	if (!this->updatecompletionport(this->m_acceptctx->IOContext[0].Accept, event_id)) {
 		::free(lpAcceptSocketContext->IOContext[1].pBuffer);
-		closesocket(lpAcceptSocketContext->m_socket);
+		::closesocket(lpAcceptSocketContext->m_socket);
 		delete lpAcceptSocketContext;
 		this->unlock();
 		return false;
@@ -1199,7 +1199,7 @@ size_t mueiocp::readbuffer(int event_id, char* buffer, size_t buffersize)
 	return readbytes;
 }
 
-void mueiocp::close(int event_id, emuestatus flag)
+void mueiocp::closesocket(int event_id)
 {
 	this->lock();
 
@@ -1211,9 +1211,42 @@ void mueiocp::close(int event_id, emuestatus flag)
 		return;
 	}
 
-	closesocket(ctx->m_socket);
+	if (ctx->m_socket != INVALID_SOCKET) {
+		::closesocket(ctx->m_socket);
+		ctx->m_socket = INVALID_SOCKET;
+
+		if (ctx->eventcb != NULL)
+			ctx->eventcb(event_id, emuestatus::eCLOSED, ctx->arg);
+	}
+
+	this->unlock();
+}
+
+void mueiocp::close(int event_id, emuestatus flag)
+{
+	if (flag == emuestatus::eCLOSED) {
+		this->closesocket(event_id);
+		return;
+	}
+
+	this->lock();
+
+	LPMUE_PS_CTX ctx = this->getctx(event_id);
+
+	if (ctx == NULL) {
+		this->addlog(emuelogtype::eDEBUG, "%s(), event id %d is invalid.", __func__, event_id);
+		this->unlock();
+		return;
+	}
+
+	if (ctx->m_socket != INVALID_SOCKET) {
+		::closesocket(ctx->m_socket);
+		ctx->m_socket = INVALID_SOCKET;
+	}
+
 	mueventeventcb eventcb = ctx->eventcb;
 	LPVOID eventcb_arg = ctx->arg;
+
 	this->remove(event_id);
 
 	if (flag != emuestatus::eNOEVENCB && eventcb != NULL)

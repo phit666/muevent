@@ -186,18 +186,11 @@ void mueventbasedelete(mueventbase* base);
 
 
 /**
-	Close muevent object connection.
+	Close muevent object socket connection.
 	@param base					muevent base from mueventnewbase call.
 	@param event_id				muevent event id.
-	@param status				close category of enum class emuestatus.
-
-	enum class emuestatus
-	@enum	eCONNECTED			client connected.
-	@enum	eCLOSED				client is closed not by socket error.
-	@enum	eSOCKERROR			client is closed because of socket error.
-	@enum	eNOEVENCB			client is closed not by socket error and event callback will not be called.
 */
-void mueventclose(mueventbase* base, int event_id, emuestatus status = emuestatus::eCLOSED);
+void mueventclosesocket(mueventbase* base, int event_id);
 
 /**
 	Thread safe to muevent, all calls after this is exclussive as the rest of the thread accessing this muevent will be in wait state.

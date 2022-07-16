@@ -42,6 +42,7 @@ enum class emuelogtype
 	eDEBUG = 8,
 	eTEST = 16,
 	eALL = eINFO | eWARNING | eERROR | eDEBUG,
+	eSILENT = 32
 };
 
 /**

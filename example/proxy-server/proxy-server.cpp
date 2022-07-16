@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
     memcpy(&proxyip, argv[1], sizeof(proxyip));
     memcpy(&svrip, argv[3], sizeof(svrip));
 
-    base = mueventnewbase(2, logger, (DWORD)emuelogtype::eALL);
+    base = mueventnewbase(0, logger, (DWORD)emuelogtype::eSILENT);
 
     LPMuevenProxyInfo proxyinfo = new MuevenProxyInfo;
     proxyinfo->_base = base;
@@ -53,6 +53,7 @@ int main(int argc, char* argv[])
 
     mueventbasedelete(base);
     delete proxyinfo;
+    std::cout << "Press any key to exit" << std::endl;
     return _getch();
 }
 
@@ -61,6 +62,8 @@ static BOOL WINAPI signalhandler(DWORD signum)
     switch (signum)
     {
     case CTRL_C_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_BREAK_EVENT:
         mueventdispatchbreak(base); /**we will return dispatch upon Ctrl-C*/
         break;
     }

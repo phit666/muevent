@@ -5,7 +5,7 @@
 	@version mueiocp 3.x.x
 */
 #define _MUEIOCP_MAJOR_VER_ 0x03
-#define _MUEIOCP_MINOR_VER_ 0x02
+#define _MUEIOCP_MINOR_VER_ 0x03
 #define _MUEIOCP_PATCH_VER_ 0x04
 
 
@@ -26,7 +26,7 @@ public:
 	bool connect(int event_id, char* initData, int initLen);
 	bool sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize);
 	size_t readbuffer(int event_id, char* buffer, size_t buffersize);
-	void close(int event_id, emuestatus flag = emuestatus::eCLOSED);
+	void closesocket(int event_id);
 	SOCKET getsocket(int event_id);
 	char* getipaddr(int event_id);
 	void setindex(int event_id, intptr_t index);
@@ -61,6 +61,7 @@ private:
 	bool handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize);
 	bool handlesend(LPMUE_PS_CTX ctx, DWORD dwIoSize);
 	bool handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize);
+	void close(int event_id, emuestatus flag = emuestatus::eCLOSED);
 	void clear();
 	void postqueued();
 	void remove(int event_id);

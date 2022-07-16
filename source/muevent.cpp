@@ -116,10 +116,10 @@ void mueventbasedelete(mueventbase* base) {
 	delete iocp;
 }
 
-void mueventclose(mueventbase* base, int event_id, emuestatus status) {
+void mueventclosesocket(mueventbase* base, int event_id) {
 	mueiocp* iocp = (mueiocp*)base;
 	iocp->lock();
-	iocp->close(event_id, status);
+	iocp->closesocket(event_id);
 	iocp->unlock();
 }
 
