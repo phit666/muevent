@@ -22,6 +22,7 @@ mueiocp::mueiocp()
 	this->m_listenport = 0;
 	this->m_eventid = 0;
 	this->m_activeworkers = 0;
+	this->m_listenip = 0;
 
 	this->m_initcltextbuffsize = MUE_CLT_MAX_IO_BUFFER_SIZE;
 	this->m_initsvrextbuffsize = MUE_SVR_MAX_IO_BUFFER_SIZE;
@@ -288,7 +289,25 @@ void mueiocp::dispatchbreak()
 	}
 }
 
-void mueiocp::listen(int listenport, mueventacceptcb acceptcb, LPVOID arg)
+void mueiocp::setacceptcbargument(LPVOID arg)
+{
+	this->m_acceptarg = arg;
+}
+
+void mueiocp::setreadeventcbargument(int event_id, LPVOID arg)
+{
+	this->lock();
+	LPMUE_PS_CTX _ctx = this->getctx(event_id);
+	if (_ctx == NULL) {
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d ctx is NULL.", __func__, event_id);
+		this->unlock();
+		return;
+	}
+	_ctx->arg = arg;
+	this->unlock();
+}
+
+void mueiocp::listen(int listenport, mueventacceptcb acceptcb, LPVOID arg, char* listenip)
 {
 	this->m_acceptctx = new MUE_PS_CTX;
 	this->m_acceptctx->clear();
@@ -296,6 +315,11 @@ void mueiocp::listen(int listenport, mueventacceptcb acceptcb, LPVOID arg)
 	this->m_acceptcb = acceptcb;
 	this->m_acceptarg = arg;
 	this->m_listenport = listenport;
+
+	if (listenip != NULL) {
+		struct hostent* h = gethostbyname(listenip);
+		this->m_listenip = (h != NULL) ? ntohl(*(DWORD*)h->h_addr) : 0;
+	}
 
 	if (!this->createlistensocket(listenport)) {
 		delete this->m_acceptctx;
@@ -419,7 +443,7 @@ int mueiocp::createlistensocket(WORD port)
 	else
 	{
 		InternetAddr.sin_family = AF_INET;
-		InternetAddr.sin_addr.S_un.S_addr = htonl(0);
+		InternetAddr.sin_addr.S_un.S_addr = htonl(this->m_listenip);
 		InternetAddr.sin_port = htons(port);
 		nRet = ::bind(this->m_listensocket, (sockaddr*)&InternetAddr, 16);
 

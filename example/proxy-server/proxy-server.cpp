@@ -18,19 +18,17 @@ static BOOL WINAPI signalhandler(DWORD signum);
 static mueventbase* base = NULL;
 static int portProxy;
 static int portServer;
-static char svrip[16] = { 0 };
+static char proxyip[50] = { 0 };
+static char svrip[50] = { 0 };
 
 int main(int argc, char* argv[])
 {
 	printf("MuEngine Proxy-Server Version 1.00.00\n");
 
-	if (argc < 3) {
+	if (argc < 4) {
 		std::cout << std::endl;
 		std::cout << "Usage:" << std::endl;
-		std::cout << "proxy-server.exe <listen port> <remote ip> <remote port>" << std::endl;
-		std::cout << std::endl;
-		std::cout << "Example:" << std::endl;
-		std::cout << "proxy-server.exe 3384 10.0.0.1 3389" << std::endl;
+		std::cout << "proxy-server.exe <listen ip> <listen port> <remote ip> <remote port>" << std::endl;
 		std::cout << std::endl;
 		system("pause");
 		return -1;
@@ -39,12 +37,13 @@ int main(int argc, char* argv[])
     SetConsoleCtrlHandler(signalhandler, TRUE);
 
     std::stringstream s;
-    s << argv[1]; s >> portProxy; s.clear();
-    s << argv[3]; s >> portServer;
-    memcpy(&svrip, argv[2], 15);
+    s << argv[2]; s >> portProxy; s.clear();
+    s << argv[4]; s >> portServer;
+    memcpy(&proxyip, argv[1], sizeof(proxyip));
+    memcpy(&svrip, argv[3], sizeof(svrip));
 
     base = mueventnewbase(1, logger);
-    mueventlisten(base, portProxy, acceptcb, base);
+    mueventlisten(base, portProxy, acceptcb, base, proxyip);
     mueventdispatch(base, true);
     mueventbasedelete(base);
     return _getch();
@@ -52,7 +51,7 @@ int main(int argc, char* argv[])
 
 static bool acceptcb(int eventid, LPVOID arg)
 {
-    mueventlock(arg);
+    mueventaddlog(base, emuelogtype::eDEBUG, "----- <<<< %s >>>> ----- eventid:%d (%d)", __func__, eventid, mueventisvalid(base, eventid));
 
     int event_id = mueventmakeconnect(arg, svrip, portServer); // create the event id of remote connection
 
@@ -62,12 +61,17 @@ static bool acceptcb(int eventid, LPVOID arg)
     intptr_t _eventid = static_cast<intptr_t>(eventid);
     mueventsetcb(arg, event_id, remote_readcb, NULL, (LPVOID)_eventid); // pass proxy event id to remote callback
 
-    mueventunlock(arg);
     return true;
 }
 
 static bool readcb(int eventid, LPVOID arg)
 {
+    mueventaddlog(base, emuelogtype::eDEBUG, "----- <<<< %s >>>> ----- eventid:%d (%d) arg:%d (%d)", __func__, 
+        eventid, 
+        mueventisvalid(base, eventid), 
+        (int)arg,
+        mueventisvalid(base, (int)arg));
+
     intptr_t ptr = (intptr_t)arg;
     int remote_eventid = static_cast<int>(ptr);
     char buf[MUE_CLT_MAX_IO_BUFFER_SIZE] = { 0 };
@@ -87,6 +91,12 @@ static bool readcb(int eventid, LPVOID arg)
 
 static bool remote_readcb(int eventid, LPVOID arg)
 {
+    mueventaddlog(base, emuelogtype::eDEBUG, "----- <<<< %s >>>> ----- eventid:%d (%d) arg:%d (%d)", __func__,
+        eventid,
+        mueventisvalid(base, eventid),
+        (int)arg,
+        mueventisvalid(base, (int)arg));
+
     intptr_t ptr = (intptr_t)arg;
     int local_eventid = static_cast<int>(ptr);
     char buf[MUE_CLT_MAX_IO_BUFFER_SIZE] = { 0 };

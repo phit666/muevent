@@ -36,7 +36,7 @@ mueventbase * mueventnewbase(int cpucorenum=0, mue_loghandler loghandler=0, DWOR
 								processing client newly connected.
 	@param arg					Variable  you want to pass to Accept callback.
 */
-void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOID arg=0);
+void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOID arg=0, char* listenip=NULL);
 
 /**
 	Connect this server to another server.
@@ -99,6 +99,22 @@ void mueventdispatch(mueventbase* base, bool block);
 	@param arg					Variable you want to pass to read and event callback.
 */
 void mueventsetcb(mueventbase* base, int event_id, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg = NULL);
+
+/**
+	Set the read and event callback of muevent object.
+	@param base					muevent base from mueventnewbase call.
+	@param arg					Variable you want to pass to accept callback.
+*/
+void mueventsetacceptcbargument(mueventbase* base, LPVOID arg);
+
+/**
+	Set the read and event callback argument.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@param arg					Variable you want to pass to accept callback.
+*/
+void mueventsetreadeventcbargument(mueventbase* base, int event_id, LPVOID arg);
+
 
 /**
 	Attempt and immediate sending of data, if not possible unsent data will be moved to dynamic buffer

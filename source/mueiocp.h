@@ -2,11 +2,11 @@
 #include "mue.h"
 #include "mueconfig.h"
 /**
-	@version mueiocp 3.00.00
+	@version mueiocp 3.x.x
 */
 #define _MUEIOCP_MAJOR_VER_ 0x03
 #define _MUEIOCP_MINOR_VER_ 0x01
-#define _MUEIOCP_PATCH_VER_ 0x03
+#define _MUEIOCP_PATCH_VER_ 0x04
 
 
 class mueiocp
@@ -18,7 +18,9 @@ public:
 		size_t initclt2ndbufsize = NULL, size_t initsvr2ndbufsize = NULL);
 	void dispatch(bool wait = true);
 	void dispatchbreak();
-	void listen(int listenport, mueventacceptcb acceptcb, LPVOID arg);
+	void listen(int listenport, mueventacceptcb acceptcb, LPVOID arg, char* listenip=NULL);
+	void setacceptcbargument(LPVOID arg);
+	void setreadeventcbargument(int event_id, LPVOID arg);
 	void setconnectcb(int event_id, mueventreadcb readcb, mueventeventcb eventcb, LPVOID arg = NULL);
 	int makeconnect(const char* ipaddr, WORD port, intptr_t index, mue_datahandler datahandler = NULL);
 	bool connect(int event_id, char* initData, int initLen);
@@ -89,7 +91,8 @@ private:
 	int m_workers;
 
 	HANDLE m_event;
-
+	
+	DWORD m_listenip;
 	WORD m_listenport;
 	int m_eventid;
 
