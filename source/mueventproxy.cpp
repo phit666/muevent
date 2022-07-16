@@ -1,10 +1,4 @@
 #include "muevent.h"
-#include <iostream>
-#include <conio.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sstream>
 
 static bool _proxy_acceptcb(int eventid, LPVOID arg);
 static bool _proxy_readcb(int eventid, LPVOID arg);
@@ -27,16 +21,13 @@ static bool _proxy_acceptcb(int eventid, LPVOID arg) {
     LPMuevenProxyInfo pProxyInfo = (LPMuevenProxyInfo)arg;
     if (pProxyInfo == NULL)
         return false;
-    int event_id = mueventmakeconnect(pProxyInfo->_base, pProxyInfo->_remotehost, pProxyInfo->_remoteport); // create the event id of remote connection
-    
+    int event_id = mueventmakeconnect(pProxyInfo->_base, pProxyInfo->_remotehost, pProxyInfo->_remoteport);
     intptr_t _event_id = static_cast<intptr_t>(event_id);
     intptr_t _eventid = static_cast<intptr_t>(eventid);
-    
     pProxyInfo->_remoteeventid = _event_id;
     pProxyInfo->_proxyeventid = _eventid;
-    
-    mueventsetcb(pProxyInfo->_base, eventid, _proxy_readcb, NULL, (LPVOID)pProxyInfo); // pass remote event id to client callback
-    mueventsetcb(pProxyInfo->_base, event_id, _proxy_remote_readcb, NULL, (LPVOID)pProxyInfo); // pass proxy event id to remote callback
+    mueventsetcb(pProxyInfo->_base, eventid, _proxy_readcb, NULL, (LPVOID)pProxyInfo);
+    mueventsetcb(pProxyInfo->_base, event_id, _proxy_remote_readcb, NULL, (LPVOID)pProxyInfo);
     return true;
 }
 
@@ -50,7 +41,7 @@ static bool _proxy_readcb(int eventid, LPVOID arg) {
     if (size == 0)
         return false;
     if (!mueventisconnected(pProxyInfo->_base, remote_eventid)) {
-        return mueventconnect(pProxyInfo->_base, remote_eventid, buf, size); // connect to remote and send initial buffer
+        return mueventconnect(pProxyInfo->_base, remote_eventid, buf, size);
     }
     else {
         return mueventwrite(pProxyInfo->_base, remote_eventid, (LPBYTE)buf, size);
