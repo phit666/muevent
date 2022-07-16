@@ -11,11 +11,9 @@
 
 
 static void logger(emuelogtype type, const char* msg);
-static bool acceptcb(int eventid, LPVOID arg);
-static bool readcb(int eventid, LPVOID arg);
-static bool remote_readcb(int eventid, LPVOID arg);
 static BOOL WINAPI signalhandler(DWORD signum);
 static mueventbase* base = NULL;
+
 static int portProxy;
 static int portServer;
 static char proxyip[50] = { 0 };
@@ -23,7 +21,7 @@ static char svrip[50] = { 0 };
 
 int main(int argc, char* argv[])
 {
-	printf("MuEngine Proxy-Server Version 1.00.00\n");
+    std::cout << "Proxy server powered by muevent." << std::endl;
 
 	if (argc < 4) {
 		std::cout << std::endl;
@@ -42,71 +40,20 @@ int main(int argc, char* argv[])
     memcpy(&proxyip, argv[1], sizeof(proxyip));
     memcpy(&svrip, argv[3], sizeof(svrip));
 
-    base = mueventnewbase(1, logger);
-    mueventlisten(base, portProxy, acceptcb, base, proxyip);
-    mueventdispatch(base, true);
+    base = mueventnewbase(2, logger, (DWORD)emuelogtype::eALL);
+
+    LPMuevenProxyInfo proxyinfo = new MuevenProxyInfo;
+    proxyinfo->_base = base;
+    memcpy(proxyinfo->_remotehost, svrip, sizeof(proxyinfo->_remotehost));
+    proxyinfo->_remoteport = portServer;
+
+    if (mueventproxyserver(proxyinfo, proxyip, portProxy)) {
+        mueventdispatch(base, true);
+    }
+
     mueventbasedelete(base);
+    delete proxyinfo;
     return _getch();
-}
-
-static bool acceptcb(int eventid, LPVOID arg)
-{
-    mueventaddlog(base, emuelogtype::eDEBUG, "----- <<<< %s >>>> ----- eventid:%d (%d)", __func__, eventid, mueventisvalid(base, eventid));
-
-    int event_id = mueventmakeconnect(arg, svrip, portServer); // create the event id of remote connection
-
-    intptr_t _event_id = static_cast<intptr_t>(event_id);
-    mueventsetcb(arg, eventid, readcb, NULL, (LPVOID)_event_id); // pass remote event id to client callback
-
-    intptr_t _eventid = static_cast<intptr_t>(eventid);
-    mueventsetcb(arg, event_id, remote_readcb, NULL, (LPVOID)_eventid); // pass proxy event id to remote callback
-
-    return true;
-}
-
-static bool readcb(int eventid, LPVOID arg)
-{
-    mueventaddlog(base, emuelogtype::eDEBUG, "----- <<<< %s >>>> ----- eventid:%d (%d) arg:%d (%d)", __func__, 
-        eventid, 
-        mueventisvalid(base, eventid), 
-        (int)arg,
-        mueventisvalid(base, (int)arg));
-
-    intptr_t ptr = (intptr_t)arg;
-    int remote_eventid = static_cast<int>(ptr);
-    char buf[MUE_CLT_MAX_IO_BUFFER_SIZE] = { 0 };
-
-    size_t size = mueventread(base, eventid, buf, MUE_CLT_MAX_IO_BUFFER_SIZE);
-
-    if (size == 0)
-        return false;
-
-    if (!mueventisconnected(base, remote_eventid)) {
-        return mueventconnect(base, remote_eventid, buf, size); // connect to remote and send initial buffer
-    }
-    else {
-        return mueventwrite(base, remote_eventid, (LPBYTE)buf, size);
-    }
-}
-
-static bool remote_readcb(int eventid, LPVOID arg)
-{
-    mueventaddlog(base, emuelogtype::eDEBUG, "----- <<<< %s >>>> ----- eventid:%d (%d) arg:%d (%d)", __func__,
-        eventid,
-        mueventisvalid(base, eventid),
-        (int)arg,
-        mueventisvalid(base, (int)arg));
-
-    intptr_t ptr = (intptr_t)arg;
-    int local_eventid = static_cast<int>(ptr);
-    char buf[MUE_CLT_MAX_IO_BUFFER_SIZE] = { 0 };
-
-    size_t size = mueventread(base, eventid, buf, MUE_CLT_MAX_IO_BUFFER_SIZE);
-
-    if (size == 0)
-        return false;
-
-    return mueventwrite(base, local_eventid, (LPBYTE)buf, size);
 }
 
 static BOOL WINAPI signalhandler(DWORD signum)
@@ -137,14 +84,3 @@ static void logger(emuelogtype type, const char* msg)
         break;
     }
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file

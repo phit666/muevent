@@ -14,6 +14,30 @@
 */
 
 /**
+	Muevent's proxy server struct.
+	@param _base				muevent base from mueventnewbase call.
+	@param _remotehost			Remote's host name or IP address where proxy server will connect to.
+	@param _remoteport			Remote's port where proxy server will connect to.
+	@param _remoteeventid		Leave blank.
+	@param _proxyeventid		Leave blank.
+*/
+typedef struct _MuevenProxyInfo {
+	_MuevenProxyInfo()
+	{
+		_base = NULL;
+		memset(_remotehost, 0, sizeof(_remotehost));
+		_remoteport = -1;
+		_remoteeventid = -1;
+		_proxyeventid = -1;
+	};
+	mueventbase* _base;
+	char _remotehost[50];
+	int _remoteport;
+	intptr_t _remoteeventid;
+	intptr_t _proxyeventid;
+} MuevenProxyInfo, * LPMuevenProxyInfo;
+
+/**
 		Create a new muevent base.
 
 		@param cpucorenum		Number of CPU, it's multiplied by 2 so 2 will spawn
@@ -233,4 +257,13 @@ bool mueventisvalid(mueventbase* base, int event_id);
 	@return						count of active IO thread workers.
 */
 int mueventactiveioworkers(mueventbase* base);
+
+/**
+	Run an instance of muevent's proxy server.
+	@param proxyinfo			pointer to MuevenProxyInfo struct, user is responsible in deleting it's memory upon exit.
+	@param proxyhost			Proxy server's listen host (fqdn) or IP address, size should be 50 char.
+	@param proxyport			Proxy server's listen port.
+	@return						true on success and false on failure.
+*/
+bool mueventproxyserver(LPMuevenProxyInfo proxyinfo, char* proxyip, int proxyport);
 
