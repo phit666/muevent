@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClCompile Include="..\..\source\mueiocp.cpp" />
     <ClCompile Include="..\..\source\muevent.cpp" />
-    <ClCompile Include="..\..\source\mueventproxy.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\mueconfig.h" />

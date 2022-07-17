@@ -482,13 +482,13 @@ SOCKET mueiocp::createsocket()
 bool mueiocp::updatecompletionport(SOCKET socket, int event_id)
 {
 	if (socket == INVALID_SOCKET) {
-		this->addlog(emuelogtype::eERROR, "%s(), socket is invalid.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d socket is invalid.", __func__, event_id);
 		return false;
 	}
 
 	if (!CreateIoCompletionPort((HANDLE)socket, this->m_completionport, (ULONG_PTR)event_id, 0))
 	{
-		this->addlog(emuelogtype::eERROR, "%s(), CreateIoCompletionPort failed: %d.", __func__, GetLastError());
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d CreateIoCompletionPort failed: %d.", __func__, event_id, GetLastError());
 		return false;
 	}
 	return true;
@@ -567,13 +567,13 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 	LPMUE_PS_CTX lpPerSocketContext = this->getctx(event_id);
 
 	if (lpPerSocketContext == NULL) {
-		this->addlog(emuelogtype::eERROR, "%s(), lpPerSocketContext is NULL.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d lpPerSocketContext is NULL.", __func__, event_id);
 		this->unlock();
 		return false;
 	}
 
 	if (lpPerSocketContext->m_socket == INVALID_SOCKET) {
-		this->addlog(emuelogtype::eERROR, "%s(), m_socket is INVALID_SOCKET.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d m_socket is INVALID_SOCKET.", __func__, event_id);
 		this->unlock();
 		return false;
 	}
@@ -581,7 +581,7 @@ bool mueiocp::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 	LPMUE_PIO_CTX	lpIoCtxt = (LPMUE_PIO_CTX)&lpPerSocketContext->IOContext[1];
 
 	if (lpIoCtxt->pBuffer == NULL) {
-		this->addlog(emuelogtype::eERROR, "%s(), pBuffer is NULL.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d pBuffer is NULL.", __func__, event_id);
 		this->unlock();
 		return false;
 	}
@@ -734,7 +734,7 @@ bool mueiocp::connect(int event_id, char* initData, int initLen)
 	LPMUE_PS_CTX pSocketContext = this->getctx(event_id);
 
 	if (pSocketContext == NULL) {
-		this->addlog(emuelogtype::eERROR, "%s(), pSocketContext is NULL.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d pSocketContext is NULL.", __func__, event_id);
 		this->unlock();
 		return NULL;
 	}
@@ -755,7 +755,7 @@ bool mueiocp::connect(int event_id, char* initData, int initLen)
 		(LPOVERLAPPED) & (pSocketContext->IOContext[0].Overlapped));
 
 	if (nRet == FALSE && (ERROR_IO_PENDING != WSAGetLastError())) {
-		this->addlog(emuelogtype::eERROR, "%s(), ConnectEx() failed: %d.", __func__, WSAGetLastError());
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d ConnectEx() failed: %d.", __func__, event_id, WSAGetLastError());
 		this->close(event_id, emuestatus::eSOCKERROR);
 		this->unlock();
 		return NULL;
@@ -946,8 +946,11 @@ bool mueiocp::handleaccept(LPMUE_PS_CTX ctx)
 		return false;
 	}
 
+	this->addlog(emuelogtype::eDEBUG, "%s(), event id %d socket:%d accepted.", __func__, event_id, lpAcceptSocketContext->m_socket);
+
 	if(lpAcceptSocketContext->eventcb != NULL)
 		lpAcceptSocketContext->eventcb(event_id, emuestatus::eCONNECTED, lpAcceptSocketContext->arg);
+
 	this->unlock();
 	return true;
 }
@@ -962,7 +965,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 	LPMUE_PIO_CTX lpIOContext = (LPMUE_PIO_CTX)&ctx->IOContext[0];
 
 	if (lpIOContext == NULL) {
-		this->addlog(emuelogtype::eERROR, "%s(), lpIOContext is NULL.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d lpIOContext is NULL.", __func__, event_id);
 		this->unlock();
 		return false;
 	}
@@ -972,7 +975,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 	int nRet = setsockopt(ctx->m_socket, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
 
 	if (nRet == SOCKET_ERROR) {
-		this->addlog(emuelogtype::eERROR, "%s(), setsockopt failed with error %d.", __func__, WSAGetLastError());
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d setsockopt failed with error %d.", __func__, event_id, WSAGetLastError());
 		this->unlock();
 		return false;
 	}
@@ -1000,7 +1003,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 		}
 	}
 	else {
-		this->addlog(emuelogtype::eERROR, "%s(), initbuflen:%d != dwIoSize:%d.", __func__, ctx->m_initbuflen, dwIoSize);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d initbuflen:%d != dwIoSize:%d.", __func__, event_id, ctx->m_initbuflen, dwIoSize);
 		ctx->m_connected = false;
 		this->close(event_id, emuestatus::eSOCKERROR);
 	}
@@ -1050,7 +1053,7 @@ bool mueiocp::IoSendSecond(LPMUE_PS_CTX ctx)
 	{
 		if (WSAGetLastError() != WSA_IO_PENDING)
 		{
-			this->addlog(emuelogtype::eERROR, "%s(), WSASend failed with error %d.", __func__, WSAGetLastError());
+			this->addlog(emuelogtype::eERROR, "%s(), event id %d WSASend failed with error %d.", __func__, ctx->m_eventid, WSAGetLastError());
 			this->close(ctx->m_eventid, emuestatus::eSOCKERROR);
 			this->unlock();
 			return false;
@@ -1080,7 +1083,7 @@ bool mueiocp::IoMoreSend(LPMUE_PS_CTX ctx)
 	{
 		if (WSAGetLastError() != WSA_IO_PENDING)
 		{
-			this->addlog(emuelogtype::eERROR, "%s(), WSASend failed with error %d.", __func__, WSAGetLastError());
+			this->addlog(emuelogtype::eERROR, "%s(), event id %d WSASend failed with error %d.", __func__, ctx->m_eventid, WSAGetLastError());
 			this->close(ctx->m_eventid, emuestatus::eSOCKERROR);
 			return false;
 		}
@@ -1133,8 +1136,8 @@ bool mueiocp::handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 
 	lpIOContext->nSentBytes += dwIoSize;
 	if (ctx->recvcb != NULL && !ctx->recvcb(eventid, ctx->arg)) { // receive callback
-		this->addlog(emuelogtype::eERROR, "%s(), Socket Header error %d", __func__, WSAGetLastError());
-		this->close(eventid);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d Socket Header error %d", __func__, eventid, WSAGetLastError());
+		this->close(eventid, emuestatus::eSOCKERROR);
 		this->unlock();
 		return false;
 	}
@@ -1176,7 +1179,7 @@ size_t mueiocp::readbuffer(int event_id, char* buffer, size_t buffersize)
 	LPMUE_PS_CTX ctx = this->getctx(event_id);
 
 	if (ctx == NULL) {
-		this->addlog(emuelogtype::eERROR, "%s(), ctx is NULL.", __func__);
+		this->addlog(emuelogtype::eERROR, "%s(), event id %d ctx is NULL.", __func__, event_id);
 		return 0;
 	}
 
@@ -1318,7 +1321,7 @@ void mueiocp::IOCPServerWorker(LPVOID arg)
 				if ((aError != ERROR_NETNAME_DELETED) && (aError != ERROR_CONNECTION_ABORTED) &&
 					(aError != ERROR_OPERATION_ABORTED) && (aError != ERROR_SEM_TIMEOUT) && (aError != ERROR_HOST_UNREACHABLE) && (aError != ERROR_CONNECTION_REFUSED)) // Patch
 				{
-					this->addlog(emuelogtype::eERROR, "%s(), GetQueueCompletionStatus Error: %d", __func__, GetLastError());
+					this->addlog(emuelogtype::eERROR, "%s(), event id %d GetQueueCompletionStatus Error: %d", __func__, event_id, GetLastError());
 					this->m_activeworkers -= 1;
 					return;
 				}

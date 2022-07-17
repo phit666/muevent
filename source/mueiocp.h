@@ -5,7 +5,7 @@
 	@version mueiocp 3.x.x
 */
 #define _MUEIOCP_MAJOR_VER_ 0x03
-#define _MUEIOCP_MINOR_VER_ 0x03
+#define _MUEIOCP_MINOR_VER_ 0x04
 #define _MUEIOCP_PATCH_VER_ 0x04
 
 

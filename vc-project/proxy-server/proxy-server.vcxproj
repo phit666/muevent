@@ -19,7 +19,6 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\example\proxy-server\MiniDump.cpp" />
     <ClCompile Include="..\..\example\proxy-server\proxy-server.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
