@@ -928,7 +928,7 @@ bool mueiocp::handleaccept(LPMUE_PS_CTX ctx)
 	lpAcceptSocketContext->m_eventid = event_id;
 	this->m_mueventmaps.insert(std::pair<int, LPMUE_PS_CTX>(event_id, lpAcceptSocketContext));
 
-	if (!this->m_acceptcb(event_id, this->m_acceptarg)) {
+	if (!this->m_acceptcb(this, event_id, this->m_acceptarg)) {
 		this->addlog(emuelogtype::eWARNING, "%s(), Accept Callback returned false.", __func__);
 		this->close(event_id);
 		this->unlock();
@@ -949,7 +949,7 @@ bool mueiocp::handleaccept(LPMUE_PS_CTX ctx)
 	this->addlog(emuelogtype::eDEBUG, "%s(), event id %d socket:%d accepted.", __func__, event_id, lpAcceptSocketContext->m_socket);
 
 	if(lpAcceptSocketContext->eventcb != NULL)
-		lpAcceptSocketContext->eventcb(event_id, emuestatus::eCONNECTED, lpAcceptSocketContext->arg);
+		lpAcceptSocketContext->eventcb(this, event_id, emuestatus::eCONNECTED, lpAcceptSocketContext->arg);
 
 	this->unlock();
 	return true;
@@ -995,7 +995,7 @@ bool mueiocp::handleconnect(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 
 		ctx->m_connected = true;
 		if (ctx->eventcb != NULL) {
-			ctx->eventcb(event_id, emuestatus::eCONNECTED, ctx->arg);
+			ctx->eventcb(this, event_id, emuestatus::eCONNECTED, ctx->arg);
 			if (!this->iseventidvalid(event_id)) {
 				this->unlock();
 				return false;
@@ -1135,7 +1135,7 @@ bool mueiocp::handlereceive(LPMUE_PS_CTX ctx, DWORD dwIoSize)
 	int eventid = ctx->m_eventid;
 
 	lpIOContext->nSentBytes += dwIoSize;
-	if (ctx->recvcb != NULL && !ctx->recvcb(eventid, ctx->arg)) { // receive callback
+	if (ctx->recvcb != NULL && !ctx->recvcb(this, eventid, ctx->arg)) { // receive callback
 		this->addlog(emuelogtype::eERROR, "%s(), event id %d Socket Header error %d", __func__, eventid, WSAGetLastError());
 		this->close(eventid, emuestatus::eSOCKERROR);
 		this->unlock();
@@ -1219,7 +1219,7 @@ void mueiocp::closesocket(int event_id)
 		ctx->m_socket = INVALID_SOCKET;
 
 		if (ctx->eventcb != NULL)
-			ctx->eventcb(event_id, emuestatus::eCLOSED, ctx->arg);
+			ctx->eventcb(this, event_id, emuestatus::eCLOSED, ctx->arg);
 	}
 
 	this->unlock();
@@ -1253,7 +1253,7 @@ void mueiocp::close(int event_id, emuestatus flag)
 	this->remove(event_id);
 
 	if (flag != emuestatus::eNOEVENCB && eventcb != NULL)
-		eventcb(event_id, flag, eventcb_arg);
+		eventcb(this, event_id, flag, eventcb_arg);
 
 	this->unlock();
 }

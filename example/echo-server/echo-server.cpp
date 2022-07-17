@@ -6,22 +6,22 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-static bool acceptcb(int eventid, LPVOID arg);
-static bool readcb(int eventid, LPVOID arg);
-static void eventcb(int eventid, emuestatus type, LPVOID arg);
+static bool acceptcb(mueventbase* base, int eventid, LPVOID arg);
+static bool readcb(mueventbase* base, int eventid, LPVOID arg);
+static void eventcb(mueventbase* base, int eventid, emuestatus type, LPVOID arg);
 static void logger(emuelogtype type, const char* msg);
 
 BOOL WINAPI signalhandler(DWORD signum);
 int indexctr = 0;
-
-mueventbase* base = NULL;
+mueventbase* gbase = NULL;
 
 int main()
 {
     SetConsoleCtrlHandler(signalhandler, TRUE);
 
-    base = mueventnewbase(2, logger);
-    mueventlisten(base, 3000, acceptcb, base);
+    mueventbase* base = mueventnewbase(2, logger);
+    gbase = base;
+    mueventlisten(base, 3000, acceptcb, NULL);
 
     std::cout << "press Ctrl-C to exit.\n";
     mueventdispatch(base, true); /**set true to make this call blocking*/
@@ -35,38 +35,38 @@ int main()
 }
 
 /**accept callback, returing false in this callback will close the client*/
-static bool acceptcb(int eventid, LPVOID arg)
+static bool acceptcb(mueventbase* base, int eventid, LPVOID arg)
 {
     /**client connection accepted, we should store the MUE object here to our variable..*/
 
     /**set read and event callback to newly accepted client*/
-    mueventsetcb(arg, eventid, readcb, eventcb, arg);
+    mueventsetcb(base, eventid, readcb, eventcb, NULL);
     
     return true;
 }
 
 /**read callback, returing false in this callback will close the client*/
-static bool readcb(int eventid, LPVOID arg)
+static bool readcb(mueventbase* base, int eventid, LPVOID arg)
 {
     char buff[100] = { 0 };
 
-    int readsize = mueventread(arg, eventid, buff, sizeof(buff));
+    int readsize = mueventread(base, eventid, buff, sizeof(buff));
     
     std::cout << "Client message : " << buff << "\n";
 
-    mueventwrite(arg, eventid, (LPBYTE)buff, readsize); /**echo the received data from client*/
+    mueventwrite(base, eventid, (LPBYTE)buff, readsize); /**echo the received data from client*/
 
 
     return true;
 }
 
 /**event callback*/
-static void eventcb(int eventid, emuestatus type, LPVOID arg)
+static void eventcb(mueventbase* base, int eventid, emuestatus type, LPVOID arg)
 {
     switch (type) {
     case emuestatus::eCONNECTED:
-        mueventaddlog(arg, emuelogtype::eINFO, "client connected, ip:%s socket:%d",
-            mueventgetipaddr(arg, eventid), mueventgetsocket(arg, eventid));
+        mueventaddlog(base, emuelogtype::eINFO, "client connected, ip:%s socket:%d",
+            mueventgetipaddr(base, eventid), mueventgetsocket(base, eventid));
         break;
     case emuestatus::eCLOSED:
         break;
@@ -100,7 +100,7 @@ BOOL WINAPI signalhandler(DWORD signum)
     switch (signum)
     {
     case CTRL_C_EVENT:
-        mueventdispatchbreak(base); /**we will return dispatch upon Ctrl-C*/
+        mueventdispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
         break;
     }
     return TRUE;

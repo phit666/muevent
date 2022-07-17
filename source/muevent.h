@@ -228,3 +228,20 @@ bool mueventisvalid(mueventbase* base, int event_id);
 */
 int mueventactiveioworkers(mueventbase* base);
 
+/**
+	Set the user custom argument.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@param arg					Custom argument to pass on event id.
+*/
+bool mueventsetcustomarg(mueventbase* base, int event_id, LPVOID arg);
+
+/**
+	Get the user custom argument.
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@return						Pointer to argument on success or 0 on failure.
+*/
+LPVOID mueventgetcustomarg(mueventbase* base, int event_id);
+
+

@@ -175,6 +175,35 @@ void mueventaddlog(mueventbase* base, emuelogtype type, const char* msg, ...) {
 	iocp->addlog(type, szBuffer);
 }
 
+bool mueventsetcustomarg(mueventbase* base, int event_id, LPVOID arg)
+{
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->lock();
+	LPMUE_PS_CTX ctx = iocp->getctx(event_id);
+	if (ctx == NULL) {
+		iocp->unlock();
+		return false;
+	}
+	ctx->arg2 = arg;
+	iocp->unlock();
+}
+
+LPVOID mueventgetcustomarg(mueventbase* base, int event_id)
+{
+	mueiocp* iocp = (mueiocp*)base;
+	LPVOID arg = NULL;
+	iocp->lock();
+	LPMUE_PS_CTX ctx = iocp->getctx(event_id);
+	if (ctx == NULL) {
+		iocp->unlock();
+		return arg;
+	}
+	arg = ctx->arg2;
+	iocp->unlock();
+	return arg;
+}
+
+
 
 
 

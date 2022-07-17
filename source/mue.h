@@ -73,17 +73,17 @@ typedef void (*mue_loghandler)(emuelogtype logtype, LPCSTR message);
 /**
 	muevent Read callback typedef.
 */
-typedef bool (*mueventreadcb)(int event_id, LPVOID argument);
+typedef bool (*mueventreadcb)(mueventbase* base, int event_id, LPVOID argument);
 
 /**
 	muevent Event callback typedef.
 */
-typedef void (*mueventeventcb)(int event_id, emuestatus eventype, LPVOID argument);
+typedef void (*mueventeventcb)(mueventbase* base, int event_id, emuestatus eventype, LPVOID argument);
 
 /**
 	muevent Accept callback typedef.
 */
-typedef bool (*mueventacceptcb)(int event_id, LPVOID argument);
+typedef bool (*mueventacceptcb)(mueventbase* base, int event_id, LPVOID argument);
 
 
 typedef struct _MUE_PIO_CTX
@@ -136,6 +136,9 @@ typedef struct _MUE_PS_CTX
 		m_lastconnecttick = 0;
 		IOContext[0].clear();
 		IOContext[1].clear();
+		arg = NULL;
+		arg2 = NULL;
+		_this = NULL;
 	}
 
 	intptr_t m_index;
@@ -153,6 +156,7 @@ typedef struct _MUE_PS_CTX
 	mueventreadcb recvcb;
 	mueventeventcb eventcb;
 	LPVOID arg;
+	LPVOID arg2;
 	LPVOID _this;
 } MUE_PS_CTX, * LPMUE_PS_CTX;
 

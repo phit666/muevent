@@ -11,15 +11,15 @@
 
 
 static void logger(emuelogtype type, const char* msg);
-static bool acceptcb(int eventid, LPVOID arg);
-static bool readcb(int eventid, LPVOID arg);
-static bool remote_readcb(int eventid, LPVOID arg);
+static bool acceptcb(mueventbase* base, int eventid, LPVOID arg);
+static bool readcb(mueventbase* base, int eventid, LPVOID arg);
+static bool remote_readcb(mueventbase* base, int eventid, LPVOID arg);
 static BOOL WINAPI signalhandler(DWORD signum);
-static mueventbase* base = NULL;
 static int portProxy;
 static int portServer;
 static char proxyip[50] = { 0 };
 static char svrip[50] = { 0 };
+mueventbase* gbase = NULL;
 
 int main(int argc, char* argv[])
 {
@@ -42,27 +42,28 @@ int main(int argc, char* argv[])
     memcpy(&proxyip, argv[1], sizeof(proxyip));
     memcpy(&svrip, argv[3], sizeof(svrip));
 
-    base = mueventnewbase(1, logger, (DWORD)emuelogtype::eALL);
-    mueventlisten(base, portProxy, acceptcb, base, proxyip);
+    mueventbase* base = mueventnewbase(1, logger, (DWORD)emuelogtype::eALL);
+    gbase = base;
+    mueventlisten(base, portProxy, acceptcb, NULL, proxyip);
     mueventdispatch(base, true);
     mueventbasedelete(base);
     return _getch();
 }
 
-static bool acceptcb(int eventid, LPVOID arg)
+static bool acceptcb(mueventbase* base, int eventid, LPVOID arg)
 {
-    int event_id = mueventmakeconnect(arg, svrip, portServer); // create the event id of remote connection
+    int event_id = mueventmakeconnect(base, svrip, portServer); // create the event id of remote connection
 
     intptr_t _event_id = static_cast<intptr_t>(event_id);
-    mueventsetcb(arg, eventid, readcb, NULL, (LPVOID)_event_id); // pass remote event id to client callback
+    mueventsetcb(base, eventid, readcb, NULL, (LPVOID)_event_id); // pass remote event id to client callback
 
     intptr_t _eventid = static_cast<intptr_t>(eventid);
-    mueventsetcb(arg, event_id, remote_readcb, NULL, (LPVOID)_eventid); // pass proxy event id to remote callback
+    mueventsetcb(base, event_id, remote_readcb, NULL, (LPVOID)_eventid); // pass proxy event id to remote callback
 
     return true;
 }
 
-static bool readcb(int eventid, LPVOID arg)
+static bool readcb(mueventbase* base, int eventid, LPVOID arg)
 {
     intptr_t ptr = (intptr_t)arg;
     int remote_eventid = static_cast<int>(ptr);
@@ -81,7 +82,7 @@ static bool readcb(int eventid, LPVOID arg)
     }
 }
 
-static bool remote_readcb(int eventid, LPVOID arg)
+static bool remote_readcb(mueventbase* base, int eventid, LPVOID arg)
 {
     intptr_t ptr = (intptr_t)arg;
     int local_eventid = static_cast<int>(ptr);
@@ -100,7 +101,7 @@ static BOOL WINAPI signalhandler(DWORD signum)
     switch (signum)
     {
     case CTRL_C_EVENT:
-        mueventdispatchbreak(base); /**we will return dispatch upon Ctrl-C*/
+        mueventdispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
         break;
     }
     return TRUE;

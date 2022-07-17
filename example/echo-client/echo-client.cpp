@@ -5,19 +5,17 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-static bool acceptcb(int eventid, LPVOID arg);
-static bool readcb(int eventid, LPVOID arg);
-static void eventcb(int eventid, emuestatus type, LPVOID arg);
+static bool acceptcb(mueventbase* base, int eventid, LPVOID arg);
+static bool readcb(mueventbase* base, int eventid, LPVOID arg);
+static void eventcb(mueventbase* base, int eventid, emuestatus type, LPVOID arg);
 static void logger(emuelogtype type, const char* msg);
-
-mueventbase* base = NULL;
 
 int main()
 {
     char initbuf[1] = { 0 };
     int initlen = 0;
 
-    base = mueventnewbase(2, logger);
+    mueventbase* base = mueventnewbase(2, logger);
 
     mueventdispatch(base, false); /**set false to make this call return immediately*/
 
@@ -37,7 +35,7 @@ int main()
 }
 
 /**read callback*/
-static bool readcb(int eventid, LPVOID arg)
+static bool readcb(mueventbase* base, int eventid, LPVOID arg)
 {
     char buff[100] = { 0 };
     int index = (int)arg;
@@ -48,7 +46,7 @@ static bool readcb(int eventid, LPVOID arg)
 }
 
 /**event callback*/
-static void eventcb(int eventid, emuestatus type, LPVOID arg)
+static void eventcb(mueventbase* base, int eventid, emuestatus type, LPVOID arg)
 {
     char sbuf[100] = { 0 };
     int index = (int)arg;
