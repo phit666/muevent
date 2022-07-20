@@ -13,6 +13,47 @@
 		mueventeventcb - Event callback to process connection status
 */
 
+/**
+	stProxyInfo struct store proxy info.
+	@param proxyport			Proxy server listening port for client connection.
+	@param remoteport			Remote server listening port  where the proxy server will connect to.
+	@param proxyhost			Proxy server listening host (FQDN) or IP address.
+	@param remotehost			Remote server listening host (FQDN) or IP address.
+*/
+typedef struct _stmueventProxyInfo {
+	_stmueventProxyInfo()
+	{
+		proxyport = -1;
+		remoteport = -1;
+		memset(proxyhost, 0, 50);
+		memset(remotehost, 0, 50);
+		base = NULL;
+		proxyreadcb = NULL;
+		remotereadcb = NULL;
+	}
+	int proxyport;
+	int remoteport;
+	char proxyhost[50];
+	char remotehost[50];
+	mueventbase* base;
+	mueventproxyreadcb proxyreadcb;
+	mueventproxyreadcb remotereadcb;
+} stmueventProxyInfo, * LpstmueventProxyInfo;
+
+/**
+	stmueventConnectInfo struct store the newly connected IP address and socket, this is only use when mueventenablecustomcontext is called 
+	because when the custom context is provided the IP address and socket info will not available in the custom context inside the 
+	accept callback. LpstmueventProxyInfo pointer should be passed as accept callback's argument to mueventlisten call then inside the accept
+	callback cast the argument to LpstProxyInfo to fetch the IP address and socket info.
+
+	@param s				Socket info of the newly connected client.
+	@param ipaddr			IP address of the newly connected client.
+*/
+typedef struct _stmueventConnectInfo {
+	SOCKET s;
+	char ipaddr[16];
+} stmueventConnectInfo, * LPstmueventConnectInfo;
+
 
 /**
 		Create a new muevent base.
@@ -47,18 +88,20 @@ void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOI
 	@param port					Server port to connect to.
 	@param initbuf				Optional initial data to send to server, this can't be NULL and user is responsible in allocating memory for this variable.
 	@param initlen				Size of optional data to send to server, set to 0 if initbuf has no data.
+	@param ctx					User provided pointer to MUE_PS_CTX struct, this is required if mueventenablecustomcontext has been called.
 	@return						-1 on failure and muevent event id on success.
 */
-int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char *initbuf, int initlen);
+int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char *initbuf, int initlen, LPMUE_PS_CTX ctx=NULL);
 
 /**
 	Make the connection setup only but don't connect.
 	@param base					muevent base from mueventnewbase call.
 	@param ipaddr				Server IP address to connect to.
 	@param port					Server port to connect to.
+	@param ctx					User provided pointer to MUE_PS_CTX struct, this is required if mueventenablecustomcontext has been called.
 	@return						-1 on failure and muevent event id on success.
 */
-int mueventmakeconnect(mueventbase* base, const char* ipaddr, WORD port);
+int mueventmakeconnect(mueventbase* base, const char* ipaddr, WORD port, LPMUE_PS_CTX ctx=NULL);
 
 /**
 	Connect to another server based on the parameters of mueventmakeconnect call.
@@ -244,4 +287,31 @@ bool mueventsetcustomarg(mueventbase* base, int event_id, LPVOID arg);
 */
 LPVOID mueventgetcustomarg(mueventbase* base, int event_id);
 
+/**
+	Start an instance of proxy server.
+	@param proxyinfo			Pointer to struct stmueventProxyInfo.
+	@param return				true on success and false on failure.
+*/
+bool mueventrunproxyserver(LpstmueventProxyInfo proxyinfo);
 
+/**
+	Enable the user to provide a pointer to MUE_PS_CTX struct.
+	@param base					muevent base from mueventnewbase call.
+*/
+void mueventenablecustomcontext(mueventbase* base);
+
+/**
+	Set the user provided MUE_PS_CTX struct pointer with the event id, this can only be called inside accept callback. 
+	@param base					muevent base from mueventnewbase call.
+	@param event_id				muevent event id.
+	@param ctx					User created pointer to MUE_PS_CTX struct.
+	@return						true on success or false on failure.
+*/
+bool mueventsetcustomcontext(mueventbase* base, int event_id, LPMUE_PS_CTX ctx);
+
+/**
+	Delete the user provided MUE_PS_CTX struct pointer, this must be called by the user upon exit. 
+	@param base					muevent base from mueventnewbase call.
+	@param ctx					User created pointer to MUE_PS_CTX struct.
+*/
+void mueventdelcustomcontext(mueventbase* base, LPMUE_PS_CTX ctx);

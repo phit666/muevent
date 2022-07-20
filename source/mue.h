@@ -17,7 +17,11 @@
 #include <thread>
 
 #define MUE_CLT_MAX_IO_BUFFER_SIZE		8192
+
+#ifndef MUE_SVR_MAX_IO_BUFFER_SIZE
 #define MUE_SVR_MAX_IO_BUFFER_SIZE		8192
+#endif
+
 #define MUE_MAX_CONT_REALLOC_REQ		100			
 #define MUE_MAX_IOCP_WORKERS		32			
 #define MUE_MAX_EVENT_ID			10000
@@ -56,18 +60,11 @@ enum class emuestatus
 	eNOEVENCB
 };
 
-struct MUE
-{
-	LPVOID _ctx;
-};
-
 typedef void muevent;
 typedef void mueventbase;
 
-typedef void (*mue_datahandler)(BYTE index, LPBYTE data, size_t size);
-typedef bool (*mue_receivecallback)(MUE* mue, LPVOID argument, LPVOID _this_ptr);
-typedef void (*mue_eventcallback)(MUE* mue, emuestatus eventype, LPVOID argument, LPVOID _this_ptr);
-typedef bool (*mue_acceptcallback)(MUE* mue, LPVOID argument, LPVOID _this_ptr);
+typedef void (*mueventproxyreadcb)(mueventbase* base, char* lpmsg, int len);
+
 typedef void (*mue_loghandler)(emuelogtype logtype, LPCSTR message);
 
 /**
@@ -88,6 +85,10 @@ typedef bool (*mueventacceptcb)(mueventbase* base, int event_id, LPVOID argument
 
 typedef struct _MUE_PIO_CTX
 {
+	_MUE_PIO_CTX()
+	{
+		clear();
+	}
 	void clear()
 	{
 		pBuffer = NULL;
@@ -97,10 +98,18 @@ typedef struct _MUE_PIO_CTX
 		nTotalBytes = 0;
 		nSentBytes = 0;
 		nWaitIO = 0;
-		Accept = -1;
-		fnc_datahandler = NULL;
+		Accept = INVALID_SOCKET;
 		memset(&Overlapped, 0, sizeof(OVERLAPPED));
 		memset(Buffer, 0, MUE_CLT_MAX_IO_BUFFER_SIZE);
+	}
+	void clear2()
+	{
+		pReallocCounts = 0;
+		nSecondOfs = 0;
+		nTotalBytes = 0;
+		nSentBytes = 0;
+		nWaitIO = 0;
+		Accept = INVALID_SOCKET;
 	}
 	OVERLAPPED Overlapped;
 	WSABUF wsabuf;
@@ -114,17 +123,21 @@ typedef struct _MUE_PIO_CTX
 	emueiotype IOOperation;
 	int nWaitIO;
 	SOCKET Accept;
-	mue_datahandler fnc_datahandler;
 } MUE_PIO_CTX, * LPMUE_PIO_CTX;
 
 typedef struct _MUE_PS_CTX
 {
+	_MUE_PS_CTX()
+	{
+		clear();
+	}
+
 	void clear()
 	{
-		m_socket = -1;
+		m_socket = INVALID_SOCKET;
 		m_index = -1;
 		m_eventid = -1;
-		memset(AddrBuf, 0, ((sizeof(sockaddr_in) + 16) * 2));
+		memset(AddrBuf, 0, sizeof(AddrBuf));
 		m_type = -1;
 		m_initbuflen = 0;
 		m_connected = false;
@@ -140,6 +153,29 @@ typedef struct _MUE_PS_CTX
 		arg2 = NULL;
 		_this = NULL;
 	}
+
+	void clear2()
+	{
+		m_socket = INVALID_SOCKET;
+		m_index = -1;
+		m_eventid = -1;
+		memset(AddrBuf, 0, sizeof(AddrBuf));
+		m_type = -1;
+		m_initbuflen = 0;
+		m_connected = false;
+		memset(m_ipaddr, 0, sizeof(m_ipaddr));
+		recvcb = NULL;
+		eventcb = NULL;
+		m_conipaddr = 0;
+		m_conport = 0;
+		m_lastconnecttick = 0;
+		IOContext[0].clear2();
+		IOContext[1].clear2();
+		arg = NULL;
+		arg2 = NULL;
+		_this = NULL;
+	}
+
 
 	intptr_t m_index;
 	SOCKET m_socket;

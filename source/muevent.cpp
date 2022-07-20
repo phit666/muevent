@@ -8,6 +8,21 @@ mueventbase* mueventnewbase(int cpucorenum, mue_loghandler loghandler, DWORD log
 	return (mueventbase*)muebase;
 }
 
+void mueventenablecustomcontext(mueventbase* base) {
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->enablecustomctx();
+}
+
+bool mueventsetcustomcontext(mueventbase* base, int event_id, LPMUE_PS_CTX ctx) {
+	mueiocp* iocp = (mueiocp*)base;
+	return iocp->setctx(event_id, ctx);
+}
+
+void mueventdelcustomcontext(mueventbase* base, LPMUE_PS_CTX ctx) {
+	mueiocp* iocp = (mueiocp*)base;
+	iocp->deletectx(ctx);
+}
+
 void mueventlisten(mueventbase* base, WORD port, mueventacceptcb acceptcb, LPVOID arg, char* listenip) {
 	mueiocp* iocp = (mueiocp*)base;
 	iocp->listen(port, acceptcb, arg, listenip);
@@ -28,11 +43,11 @@ void mueventdispatch(mueventbase* base, bool block) {
 	iocp->dispatch(block);
 }
 
-int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* initbuf, int initlen) {
+int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* initbuf, int initlen, LPMUE_PS_CTX ctx) {
 	mueiocp* iocp = (mueiocp*)base;
-	int eventid = iocp->makeconnect(ipaddr, port, 0);
-	LPMUE_PS_CTX ctx = iocp->getctx(eventid);
-	if (ctx == NULL) {
+	int eventid = iocp->makeconnect(ipaddr, port, 0, ctx);
+	LPMUE_PS_CTX _ctx = iocp->getctx(eventid);
+	if (_ctx == NULL) {
 		iocp->addlog(emuelogtype::eWARNING, "%s(), makeconnect failed.", __func__);
 		return NULL;
 	}
@@ -40,20 +55,20 @@ int mueventconnect(mueventbase* base, const char* ipaddr, WORD port, char* initb
 		iocp->addlog(emuelogtype::eWARNING, "%s(), initbuf is NULL.", __func__);
 		return NULL;
 	}
-	ctx->_this = (LPVOID)iocp;
+	_ctx->_this = (LPVOID)iocp;
 	iocp->connect(eventid, initbuf, initlen);
 	return eventid;
 }
 
-int mueventmakeconnect(mueventbase* base, const char* ipaddr, WORD port) {
+int mueventmakeconnect(mueventbase* base, const char* ipaddr, WORD port, LPMUE_PS_CTX ctx) {
 	mueiocp* iocp = (mueiocp*)base;
-	int eventid = iocp->makeconnect(ipaddr, port, 0);
-	LPMUE_PS_CTX ctx = iocp->getctx(eventid);
-	if (ctx == NULL) {
+	int eventid = iocp->makeconnect(ipaddr, port, 0, ctx);
+	LPMUE_PS_CTX _ctx = iocp->getctx(eventid);
+	if (_ctx == NULL) {
 		iocp->addlog(emuelogtype::eWARNING, "%s(), mueventmakeconnect failed.", __func__);
 		return NULL;
 	}
-	ctx->_this = (LPVOID)iocp;
+	_ctx->_this = (LPVOID)iocp;
 	return eventid;
 }
 
@@ -186,6 +201,7 @@ bool mueventsetcustomarg(mueventbase* base, int event_id, LPVOID arg)
 	}
 	ctx->arg2 = arg;
 	iocp->unlock();
+	return true;
 }
 
 LPVOID mueventgetcustomarg(mueventbase* base, int event_id)
